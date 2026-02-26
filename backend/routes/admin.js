@@ -24,7 +24,6 @@ router.post('/users', authenticateToken, authorize('admin'), async (req, res) =>
   try {
     const { email, password, first_name, last_name, role, department } = req.body;
     
-    // Check if email exists
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Email already exists' });
@@ -71,7 +70,6 @@ router.put('/users/:id', authenticateToken, authorize('admin'), async (req, res)
     );
     res.json({ message: 'User updated' });
   } catch (error) {
-    console.error('Update user error:', error);
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
@@ -96,7 +94,7 @@ router.post('/users/:id/reactivate', authenticateToken, authorize('admin'), asyn
   }
 });
 
-// Get stats - FIXED
+// Get stats - Returns ALL possible field names for compatibility
 router.get('/stats', authenticateToken, authorize('admin'), async (req, res) => {
   try {
     const totalUsers = await pool.query('SELECT COUNT(*)::int as count FROM users');
@@ -108,16 +106,37 @@ router.get('/stats', authenticateToken, authorize('admin'), async (req, res) => 
     const completedAppointments = await pool.query("SELECT COUNT(*)::int as count FROM appointments WHERE status = 'completed'");
     const cancelledAppointments = await pool.query("SELECT COUNT(*)::int as count FROM appointments WHERE status = 'cancelled'");
     
-    res.json({
+    // Return with multiple field name formats for frontend compatibility
+    const stats = {
+      // snake_case
       total_users: totalUsers.rows[0].count,
-      students: students.rows[0].count,
-      instructors: instructors.rows[0].count,
-      admins: admins.rows[0].count,
+      total_students: students.rows[0].count,
+      total_instructors: instructors.rows[0].count,
+      total_admins: admins.rows[0].count,
       active_users: activeUsers.rows[0].count,
       total_appointments: totalAppointments.rows[0].count,
       completed_appointments: completedAppointments.rows[0].count,
-      cancelled_appointments: cancelledAppointments.rows[0].count
-    });
+      cancelled_appointments: cancelledAppointments.rows[0].count,
+      // camelCase
+      totalUsers: totalUsers.rows[0].count,
+      totalStudents: students.rows[0].count,
+      totalInstructors: instructors.rows[0].count,
+      totalAdmins: admins.rows[0].count,
+      activeUsers: activeUsers.rows[0].count,
+      totalAppointments: totalAppointments.rows[0].count,
+      completedAppointments: completedAppointments.rows[0].count,
+      cancelledAppointments: cancelledAppointments.rows[0].count,
+      // Simple names
+      users: totalUsers.rows[0].count,
+      students: students.rows[0].count,
+      instructors: instructors.rows[0].count,
+      admins: admins.rows[0].count,
+      appointments: totalAppointments.rows[0].count,
+      completed: completedAppointments.rows[0].count,
+      cancelled: cancelledAppointments.rows[0].count
+    };
+    
+    res.json(stats);
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
@@ -136,7 +155,6 @@ router.get('/audit-logs', authenticateToken, authorize('admin'), async (req, res
     `);
     res.json({ logs: result.rows });
   } catch (error) {
-    console.error('Get audit logs error:', error);
     res.status(500).json({ error: 'Failed to fetch audit logs' });
   }
 });
