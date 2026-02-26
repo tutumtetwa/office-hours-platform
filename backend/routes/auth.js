@@ -8,6 +8,25 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+// Helper to log actions
+async function logAction(userId, action, details = {}, req = null) {
+  try {
+    await pool.query(
+      'INSERT INTO audit_logs (id, user_id, action, details, ip_address, user_agent, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+      [
+        uuidv4(),
+        userId,
+        action,
+        JSON.stringify(details),
+        req?.ip || req?.connection?.remoteAddress || 'unknown',
+        req?.headers?.['user-agent'] || 'unknown'
+      ]
+    );
+  } catch (e) {
+    console.error('Failed to log action:', e);
+  }
+}
+
 // Register
 router.post('/register', async (req, res) => {
   try {
@@ -29,6 +48,8 @@ router.post('/register', async (req, res) => {
       'INSERT INTO users (id, email, password, first_name, last_name, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [userId, email, hashedPassword, first_name, last_name, role, department]
     );
+
+    await logAction(userId, 'USER_REGISTERED', { email, role }, req);
 
     const token = jwt.sign({ id: userId, email, role }, JWT_SECRET, { expiresIn: '24h' });
 
@@ -56,16 +77,19 @@ router.post('/login', async (req, res) => {
     const user = result.rows[0];
 
     if (!user || !bcrypt.compareSync(password, user.password)) {
+      await logAction(null, 'LOGIN_FAILED', { email, reason: 'Invalid credentials' }, req);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     if (!user.is_active) {
+      await logAction(user.id, 'LOGIN_FAILED', { reason: 'Account deactivated' }, req);
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
 
     await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+    await logAction(user.id, 'LOGIN_SUCCESS', { email: user.email }, req);
 
     res.json({
       message: 'Login successful',
@@ -114,6 +138,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
       [first_name, last_name, department, req.user.id]
     );
 
+    await logAction(req.user.id, 'PROFILE_UPDATED', { first_name, last_name, department }, req);
     res.json({ message: 'Profile updated' });
   } catch (error) {
     console.error('Update profile error:', error);
@@ -136,6 +161,7 @@ router.put('/password', authenticateToken, async (req, res) => {
     const hashedPassword = bcrypt.hashSync(new_password, 10);
     await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, req.user.id]);
 
+    await logAction(req.user.id, 'PASSWORD_CHANGED', {}, req);
     res.json({ message: 'Password updated' });
   } catch (error) {
     console.error('Change password error:', error);
@@ -144,7 +170,8 @@ router.put('/password', authenticateToken, async (req, res) => {
 });
 
 // Logout
-router.post('/logout', authenticateToken, (req, res) => {
+router.post('/logout', authenticateToken, async (req, res) => {
+  await logAction(req.user.id, 'LOGOUT', {}, req);
   res.json({ message: 'Logged out successfully' });
 });
 
