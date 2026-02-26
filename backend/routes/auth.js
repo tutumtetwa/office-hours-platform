@@ -8,9 +8,19 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+// Helper to get real IP
+function getClientIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+         req.headers['x-real-ip'] || 
+         req.connection?.remoteAddress || 
+         req.ip || 
+         'unknown';
+}
+
 // Helper to log actions
 async function logAction(userId, action, details = {}, req = null) {
   try {
+    const ip = req ? getClientIP(req) : 'unknown';
     await pool.query(
       'INSERT INTO audit_logs (id, user_id, action, details, ip_address, user_agent, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
       [
@@ -18,8 +28,8 @@ async function logAction(userId, action, details = {}, req = null) {
         userId,
         action,
         JSON.stringify(details),
-        req?.ip || req?.connection?.remoteAddress || 'unknown',
-        req?.headers?.['user-agent'] || 'unknown'
+        ip,
+        req?.headers?.['user-agent']?.substring(0, 200) || 'unknown'
       ]
     );
   } catch (e) {
@@ -45,7 +55,7 @@ router.post('/register', async (req, res) => {
     const userId = uuidv4();
 
     await pool.query(
-      'INSERT INTO users (id, email, password, first_name, last_name, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      'INSERT INTO users (id, email, password, first_name, last_name, role, department, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())',
       [userId, email, hashedPassword, first_name, last_name, role, department]
     );
 
