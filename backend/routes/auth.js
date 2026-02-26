@@ -2,92 +2,70 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { db } = require('../models/database');
-const { authenticateToken, JWT_SECRET, SESSION_TIMEOUT } = require('../middleware/auth');
-const { validateRegistration, validateLogin } = require('../utils/validators');
-const { logAction } = require('../utils/logger');
+const { pool } = require('../models/database');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-// Register new user
-router.post('/register', validateRegistration, async (req, res) => {
+// Register
+router.post('/register', async (req, res) => {
   try {
     const { email, password, first_name, last_name, role = 'student', department } = req.body;
 
-    // Check if user already exists
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existingUser) {
-      logAction(null, 'REGISTRATION_FAILED', 'user', null, { email, reason: 'Email already exists' }, req);
+    if (!email || !password || !first_name || !last_name) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Create user
+    const hashedPassword = bcrypt.hashSync(password, 10);
     const userId = uuidv4();
-    db.prepare(`
-      INSERT INTO users (id, email, password, first_name, last_name, role, department)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, email, hashedPassword, first_name, last_name, role, department);
 
-    logAction(userId, 'USER_REGISTERED', 'user', userId, { email, role }, req);
+    await pool.query(
+      'INSERT INTO users (id, email, password, first_name, last_name, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [userId, email, hashedPassword, first_name, last_name, role, department]
+    );
+
+    const token = jwt.sign({ id: userId, email, role }, JWT_SECRET, { expiresIn: '24h' });
 
     res.status(201).json({
       message: 'Registration successful',
-      user: {
-        id: userId,
-        email,
-        first_name,
-        last_name,
-        role,
-        department
-      }
+      token,
+      user: { id: userId, email, first_name, last_name, role, department }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
 // Login
-router.post('/login', validateLogin, async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
-    const user = db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1').get(email);
-    if (!user) {
-      logAction(null, 'LOGIN_FAILED', 'user', null, { email, reason: 'User not found' }, req);
-      return res.status(401).json({ error: 'Invalid email or password' });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
     }
 
-    // Check password
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      logAction(user.id, 'LOGIN_FAILED', 'user', user.id, { reason: 'Invalid password' }, req);
-      return res.status(401).json({ error: 'Invalid email or password' });
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Create JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    if (!user.is_active) {
+      return res.status(403).json({ error: 'Account is deactivated' });
+    }
 
-    // Create session
-    const sessionId = uuidv4();
-    const expiresAt = new Date(Date.now() + SESSION_TIMEOUT).toISOString();
-    db.prepare(`
-      INSERT INTO sessions (id, user_id, token, expires_at)
-      VALUES (?, ?, ?, ?)
-    `).run(sessionId, user.id, token, expiresAt);
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
 
-    // Update last login
-    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
-
-    logAction(user.id, 'LOGIN_SUCCESS', 'user', user.id, { email }, req);
+    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 
     res.json({
       message: 'Login successful',
@@ -107,106 +85,67 @@ router.post('/login', validateLogin, async (req, res) => {
   }
 });
 
-// Logout
-router.post('/logout', authenticateToken, (req, res) => {
-  try {
-    // Delete session
-    db.prepare('DELETE FROM sessions WHERE token = ?').run(req.token);
-    
-    logAction(req.user.id, 'LOGOUT', 'user', req.user.id, {}, req);
-
-    res.json({ message: 'Logged out successfully' });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ error: 'Logout failed' });
-  }
-});
-
 // Get current user
-router.get('/me', authenticateToken, (req, res) => {
-  res.json({ user: req.user });
-});
-
-// Update password
-router.put('/password', authenticateToken, async (req, res) => {
+router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const { current_password, new_password } = req.body;
-
-    if (!current_password || !new_password) {
-      return res.status(400).json({ error: 'Current and new password required' });
-    }
-
-    if (new_password.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
-    }
-
-    // Get user with password
-    const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.id);
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name, role, department FROM users WHERE id = $1',
+      [req.user.id]
+    );
     
-    // Verify current password
-    const validPassword = await bcrypt.compare(current_password, user.password);
-    if (!validPassword) {
-      logAction(req.user.id, 'PASSWORD_CHANGE_FAILED', 'user', req.user.id, { reason: 'Invalid current password' }, req);
-      return res.status(401).json({ error: 'Current password is incorrect' });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Hash and update new password
-    const hashedPassword = await bcrypt.hash(new_password, 12);
-    db.prepare('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(hashedPassword, req.user.id);
-
-    // Invalidate all other sessions
-    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(req.user.id, req.token);
-
-    logAction(req.user.id, 'PASSWORD_CHANGED', 'user', req.user.id, {}, req);
-
-    res.json({ message: 'Password updated successfully' });
+    res.json({ user: result.rows[0] });
   } catch (error) {
-    console.error('Password update error:', error);
-    res.status(500).json({ error: 'Password update failed' });
+    console.error('Get me error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
   }
 });
 
 // Update profile
-router.put('/profile', authenticateToken, (req, res) => {
+router.put('/profile', authenticateToken, async (req, res) => {
   try {
     const { first_name, last_name, department } = req.body;
+    
+    await pool.query(
+      'UPDATE users SET first_name = $1, last_name = $2, department = $3, updated_at = NOW() WHERE id = $4',
+      [first_name, last_name, department, req.user.id]
+    );
 
-    const updates = [];
-    const params = [];
-
-    if (first_name) {
-      updates.push('first_name = ?');
-      params.push(first_name.trim());
-    }
-    if (last_name) {
-      updates.push('last_name = ?');
-      params.push(last_name.trim());
-    }
-    if (department !== undefined) {
-      updates.push('department = ?');
-      params.push(department ? department.trim() : null);
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-    params.push(req.user.id);
-
-    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
-
-    const updatedUser = db.prepare('SELECT id, email, first_name, last_name, role, department FROM users WHERE id = ?')
-      .get(req.user.id);
-
-    logAction(req.user.id, 'PROFILE_UPDATED', 'user', req.user.id, { updated_fields: Object.keys(req.body) }, req);
-
-    res.json({ message: 'Profile updated', user: updatedUser });
+    res.json({ message: 'Profile updated' });
   } catch (error) {
-    console.error('Profile update error:', error);
-    res.status(500).json({ error: 'Profile update failed' });
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
   }
+});
+
+// Change password
+router.put('/password', authenticateToken, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+
+    const result = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+    const user = result.rows[0];
+
+    if (!bcrypt.compareSync(current_password, user.password)) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    const hashedPassword = bcrypt.hashSync(new_password, 10);
+    await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, req.user.id]);
+
+    res.json({ message: 'Password updated' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Logout
+router.post('/logout', authenticateToken, (req, res) => {
+  res.json({ message: 'Logged out successfully' });
 });
 
 module.exports = router;
