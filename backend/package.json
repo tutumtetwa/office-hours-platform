@@ -1,0 +1,25 @@
+{
+  "name": "office-hours-backend",
+  "version": "2.0.0",
+  "description": "Office Hours Booking Platform API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "better-sqlite3": "^9.4.3",
+    "uuid": "^9.0.0",
+    "nodemailer": "^6.9.7",
+    "node-cron": "^3.0.3",
+    "ical-generator": "^6.0.1",
+    "date-fns": "^2.30.0"
+  }
+}
