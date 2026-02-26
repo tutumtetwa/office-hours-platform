@@ -25,7 +25,7 @@ const Layout = ({ children }) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const res = await fetch('http://localhost:3001/api/notifications?limit=20', {
+      const res = await fetch('/api/notifications?limit=20', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -39,7 +39,7 @@ const Layout = ({ children }) => {
   const markAllAsRead = async () => {
     try {
       const token = localStorage.getItem('token');
-      await fetch('http://localhost:3001/api/notifications/read-all', {
+      await fetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
