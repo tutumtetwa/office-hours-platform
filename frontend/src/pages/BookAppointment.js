@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Check, Users, Bell } from 'lucide-react';
 import { PageHeader, Card, Spinner, Alert, Modal, FormSelect, FormTextarea } from '../components/UI';
 import api from '../utils/api';
 
@@ -7,29 +7,22 @@ const BookAppointment = () => {
   const [instructors, setInstructors] = useState([]);
   const [slots, setSlots] = useState([]);
   const [selectedInstructor, setSelectedInstructor] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [bookingSlot, setBookingSlot] = useState(null);
+  const [waitlistSlot, setWaitlistSlot] = useState(null);
   const [bookingData, setBookingData] = useState({ meeting_type: 'in-person', topic: '', notes: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchInstructors();
-  }, []);
-
-  useEffect(() => {
-    fetchSlots();
-  }, [selectedInstructor, selectedDate]);
+  useEffect(() => { fetchInstructors(); }, []);
+  useEffect(() => { fetchSlots(); }, [selectedInstructor]);
 
   const fetchInstructors = async () => {
     try {
       const res = await api.get('/slots/instructors');
       setInstructors(res.data.instructors || []);
-    } catch (e) {
-      setError('Failed to load instructors');
-    }
+    } catch (e) { setError('Failed to load instructors'); }
     setLoading(false);
   };
 
@@ -39,16 +32,13 @@ const BookAppointment = () => {
       if (selectedInstructor) params.instructor_id = selectedInstructor;
       const res = await api.get('/slots', { params });
       setSlots(res.data.slots || []);
-    } catch (e) {
-      console.error('Failed to fetch slots:', e);
-    }
+    } catch (e) { console.error('Failed to fetch slots:', e); }
   };
 
   const handleBook = async () => {
     if (!bookingSlot) return;
     setSubmitting(true);
     setError('');
-    
     try {
       await api.post('/appointments/book', {
         slot_id: bookingSlot.id,
@@ -67,48 +57,48 @@ const BookAppointment = () => {
     setSubmitting(false);
   };
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const handleJoinWaitlist = async () => {
+    if (!waitlistSlot) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await api.post('/waitlist/join', { slot_id: waitlistSlot.id });
+      setSuccess(`Added to waitlist! You are #${res.data.position} in line. You'll be notified if a spot opens up.`);
+      setWaitlistSlot(null);
+      fetchSlots();
+      setTimeout(() => setSuccess(''), 7000);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to join waitlist');
+    }
+    setSubmitting(false);
   };
 
+  const formatDate = (date) => new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const formatTime = (time) => {
     const [h, m] = time.split(':');
     const hour = parseInt(h);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${m} ${ampm}`;
+    return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`;
   };
 
-  // Group slots by date
   const groupedSlots = slots.reduce((acc, slot) => {
-    const date = slot.date;
-    if (!acc[date]) acc[date] = [];
-    acc[date].push(slot);
+    if (!acc[slot.date]) acc[slot.date] = [];
+    acc[slot.date].push(slot);
     return acc;
   }, {});
 
-  // Sort dates
   const sortedDates = Object.keys(groupedSlots).sort();
 
-  // Group by instructor within each date
   const getInstructorSlots = (dateSlots) => {
     const byInstructor = {};
     dateSlots.forEach(slot => {
       const instId = slot.instructor_id;
-      if (!byInstructor[instId]) {
-        byInstructor[instId] = {
-          instructor: slot.instructor,
-          slots: []
-        };
-      }
+      if (!byInstructor[instId]) byInstructor[instId] = { instructor: slot.instructor, slots: [] };
       byInstructor[instId].slots.push(slot);
     });
     return Object.values(byInstructor);
   };
 
-  if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><Spinner size={48} /></div>;
-  }
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><Spinner size={48} /></div>;
 
   return (
     <>
@@ -116,32 +106,39 @@ const BookAppointment = () => {
       
       <div className="page-content">
         {success && <Alert type="success" onClose={() => setSuccess('')}>{success}</Alert>}
-        {error && !bookingSlot && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
+        {error && !bookingSlot && !waitlistSlot && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
 
-        {/* Filters */}
         <Card style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div style={{ flex: '1', minWidth: '200px' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                Filter by Instructor
-              </label>
-              <select
-                value={selectedInstructor}
-                onChange={(e) => setSelectedInstructor(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem' }}
-              >
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>Filter by Instructor</label>
+              <select value={selectedInstructor} onChange={(e) => setSelectedInstructor(e.target.value)}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem' }}>
                 <option value="">All Instructors</option>
                 {instructors.map(inst => (
-                  <option key={inst.id} value={inst.id}>
-                    {inst.first_name} {inst.last_name} - {inst.department}
-                  </option>
+                  <option key={inst.id} value={inst.id}>{inst.first_name} {inst.last_name} - {inst.department}</option>
                 ))}
               </select>
             </div>
           </div>
         </Card>
 
-        {/* Slots List */}
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#fffef5', border: '2px solid #c9a227' }}></div>
+            <span>Available</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#f5f5f5', border: '1px solid #ccc' }}></div>
+            <span>Booked (Join Waitlist)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#e8f5e9', border: '2px solid #2e7d32' }}></div>
+            <span>Your Booking</span>
+          </div>
+        </div>
+
         {sortedDates.length === 0 ? (
           <Card>
             <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>
@@ -162,119 +159,45 @@ const BookAppointment = () => {
                   <div key={instructor.id} style={{ marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                       <User size={18} color="#2d5a8a" />
-                      <span style={{ fontWeight: '600', color: '#1e3a5f' }}>
-                        {instructor.first_name} {instructor.last_name}
-                      </span>
-                      <span style={{ color: '#888', fontSize: '0.875rem' }}>
-                        {instructor.department}
-                      </span>
+                      <span style={{ fontWeight: '600', color: '#1e3a5f' }}>{instructor.first_name} {instructor.last_name}</span>
+                      <span style={{ color: '#888', fontSize: '0.875rem' }}>{instructor.department}</span>
                     </div>
                     
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                       {instSlots.map(slot => (
-                        <div
-                          key={slot.id}
+                        <div key={slot.id}
                           style={{
-                            padding: '0.75rem 1rem',
-                            borderRadius: '8px',
-                            border: slot.is_booked 
-                              ? '1px solid #e0e0e0' 
-                              : slot.is_my_booking 
-                                ? '2px solid #2e7d32'
-                                : '1px solid #c9a227',
-                            background: slot.is_booked 
-                              ? '#f5f5f5' 
-                              : slot.is_my_booking
-                                ? '#e8f5e9'
-                                : '#fffef5',
-                            cursor: slot.is_booked ? 'not-allowed' : 'pointer',
-                            opacity: slot.is_booked ? 0.6 : 1,
+                            padding: '0.75rem 1rem', borderRadius: '8px', minWidth: '150px', textAlign: 'center',
+                            border: slot.is_my_booking ? '2px solid #2e7d32' : slot.is_booked ? '1px solid #e0e0e0' : '2px solid #c9a227',
+                            background: slot.is_my_booking ? '#e8f5e9' : slot.is_booked ? '#f9f9f9' : '#fffef5',
+                            cursor: slot.is_my_booking ? 'default' : 'pointer',
                             transition: 'all 0.2s',
-                            position: 'relative',
-                            minWidth: '140px',
-                            textAlign: 'center'
                           }}
-                          onClick={() => !slot.is_booked && !slot.is_my_booking && setBookingSlot(slot)}
-                          onMouseOver={(e) => !slot.is_booked && (e.currentTarget.style.transform = 'translateY(-2px)')}
-                          onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                          onClick={() => {
+                            if (slot.is_my_booking) return;
+                            if (slot.is_booked) setWaitlistSlot(slot);
+                            else setBookingSlot(slot);
+                          }}
+                          onMouseOver={(e) => !slot.is_my_booking && (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)')}
+                          onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)', e.currentTarget.style.boxShadow = 'none')}
                         >
-                          {/* Booked overlay */}
-                          {slot.is_booked && !slot.is_my_booking && (
-                            <div style={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: 0,
-                              right: 0,
-                              height: '2px',
-                              background: '#999',
-                              transform: 'rotate(-5deg)'
-                            }} />
-                          )}
-                          
-                          <div style={{ 
-                            fontWeight: '600', 
-                            color: slot.is_booked ? '#999' : '#1e3a5f',
-                            textDecoration: slot.is_booked && !slot.is_my_booking ? 'line-through' : 'none',
-                            fontSize: '0.95rem'
-                          }}>
+                          <div style={{ fontWeight: '600', color: slot.is_booked && !slot.is_my_booking ? '#888' : '#1e3a5f', textDecoration: slot.is_booked && !slot.is_my_booking ? 'line-through' : 'none' }}>
                             {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                           </div>
                           
                           {slot.location && (
-                            <div style={{ 
-                              fontSize: '0.75rem', 
-                              color: slot.is_booked ? '#aaa' : '#666',
-                              marginTop: '0.25rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '0.25rem'
-                            }}>
-                              <MapPin size={12} />
-                              {slot.location}
+                            <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
+                              <MapPin size={12} /> {slot.location}
                             </div>
                           )}
                           
-                          {/* Status badge */}
-                          {slot.is_booked && !slot.is_my_booking && (
-                            <div style={{
-                              marginTop: '0.5rem',
-                              fontSize: '0.7rem',
-                              color: '#999',
-                              fontWeight: '600',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px'
-                            }}>
-                              Unavailable
-                            </div>
-                          )}
-                          
-                          {slot.is_my_booking && (
-                            <div style={{
-                              marginTop: '0.5rem',
-                              fontSize: '0.7rem',
-                              color: '#2e7d32',
-                              fontWeight: '600',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '0.25rem'
-                            }}>
-                              <Check size={12} />
-                              Your Booking
-                            </div>
-                          )}
-                          
-                          {!slot.is_booked && !slot.is_my_booking && (
-                            <div style={{
-                              marginTop: '0.5rem',
-                              fontSize: '0.7rem',
-                              color: '#c9a227',
-                              fontWeight: '600'
-                            }}>
-                              Available
-                            </div>
-                          )}
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem',
+                            color: slot.is_my_booking ? '#2e7d32' : slot.is_booked ? '#f57c00' : '#c9a227'
+                          }}>
+                            {slot.is_my_booking ? <><Check size={12} /> Your Booking</> : 
+                             slot.is_booked ? <><Users size={12} /> Join Waitlist</> : 
+                             'Book Now'}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -287,69 +210,52 @@ const BookAppointment = () => {
       </div>
 
       {/* Booking Modal */}
-      <Modal
-        isOpen={!!bookingSlot}
-        onClose={() => { setBookingSlot(null); setError(''); }}
-        title="Confirm Booking"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => { setBookingSlot(null); setError(''); }}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleBook} disabled={submitting}>
-              {submitting ? <Spinner size={18} /> : 'Confirm Booking'}
-            </button>
-          </>
-        }
-      >
+      <Modal isOpen={!!bookingSlot} onClose={() => { setBookingSlot(null); setError(''); }} title="Confirm Booking"
+        footer={<>
+          <button className="btn btn-secondary" onClick={() => { setBookingSlot(null); setError(''); }}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleBook} disabled={submitting}>{submitting ? <Spinner size={18} /> : 'Confirm Booking'}</button>
+        </>}>
         {error && <Alert type="error">{error}</Alert>}
-        
         {bookingSlot && (
           <div style={{ background: '#f8f6f3', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <Calendar size={18} color="#1e3a5f" />
-              <strong>{formatDate(bookingSlot.date)}</strong>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <Clock size={18} color="#1e3a5f" />
-              <span>{formatTime(bookingSlot.start_time)} - {formatTime(bookingSlot.end_time)}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <User size={18} color="#1e3a5f" />
-              <span>{bookingSlot.instructor?.first_name} {bookingSlot.instructor?.last_name}</span>
-            </div>
-            {bookingSlot.location && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <MapPin size={18} color="#1e3a5f" />
-                <span>{bookingSlot.location}</span>
-              </div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Calendar size={18} color="#1e3a5f" /><strong>{formatDate(bookingSlot.date)}</strong></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Clock size={18} color="#1e3a5f" /><span>{formatTime(bookingSlot.start_time)} - {formatTime(bookingSlot.end_time)}</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><User size={18} color="#1e3a5f" /><span>{bookingSlot.instructor?.first_name} {bookingSlot.instructor?.last_name}</span></div>
+            {bookingSlot.location && <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}><MapPin size={18} color="#1e3a5f" /><span>{bookingSlot.location}</span></div>}
           </div>
         )}
+        <FormSelect label="Meeting Type" value={bookingData.meeting_type} onChange={(e) => setBookingData({ ...bookingData, meeting_type: e.target.value })}
+          options={[{ value: 'in-person', label: 'In-Person' }, { value: 'virtual', label: 'Virtual' }]} />
+        <FormTextarea label="Topic (Optional)" placeholder="What would you like to discuss?" value={bookingData.topic} onChange={(e) => setBookingData({ ...bookingData, topic: e.target.value })} rows={3} />
+        <FormTextarea label="Additional Notes (Optional)" placeholder="Any additional information..." value={bookingData.notes} onChange={(e) => setBookingData({ ...bookingData, notes: e.target.value })} rows={2} />
+      </Modal>
 
-        <FormSelect
-          label="Meeting Type"
-          value={bookingData.meeting_type}
-          onChange={(e) => setBookingData({ ...bookingData, meeting_type: e.target.value })}
-          options={[
-            { value: 'in-person', label: 'In-Person' },
-            { value: 'virtual', label: 'Virtual' }
-          ]}
-        />
-
-        <FormTextarea
-          label="Topic (Optional)"
-          placeholder="What would you like to discuss?"
-          value={bookingData.topic}
-          onChange={(e) => setBookingData({ ...bookingData, topic: e.target.value })}
-          rows={3}
-        />
-
-        <FormTextarea
-          label="Additional Notes (Optional)"
-          placeholder="Any additional information for the instructor..."
-          value={bookingData.notes}
-          onChange={(e) => setBookingData({ ...bookingData, notes: e.target.value })}
-          rows={2}
-        />
+      {/* Waitlist Modal */}
+      <Modal isOpen={!!waitlistSlot} onClose={() => { setWaitlistSlot(null); setError(''); }} title="Join Waitlist"
+        footer={<>
+          <button className="btn btn-secondary" onClick={() => { setWaitlistSlot(null); setError(''); }}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleJoinWaitlist} disabled={submitting} style={{ background: '#f57c00' }}>
+            {submitting ? <Spinner size={18} /> : <><Bell size={16} style={{ marginRight: '0.5rem' }} /> Join Waitlist</>}
+          </button>
+        </>}>
+        {error && <Alert type="error">{error}</Alert>}
+        {waitlistSlot && (
+          <>
+            <div style={{ background: '#fff3e0', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', border: '1px solid #ffcc80' }}>
+              <div style={{ fontWeight: '600', color: '#e65100', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Users size={18} /> This slot is currently booked
+              </div>
+              <p style={{ color: '#666', margin: 0, fontSize: '0.9rem' }}>
+                Join the waitlist to be notified if the appointment is cancelled. You'll get an alert and can book the slot before anyone else!
+              </p>
+            </div>
+            <div style={{ background: '#f8f6f3', borderRadius: '8px', padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Calendar size={18} color="#1e3a5f" /><strong>{formatDate(waitlistSlot.date)}</strong></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Clock size={18} color="#1e3a5f" /><span>{formatTime(waitlistSlot.start_time)} - {formatTime(waitlistSlot.end_time)}</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><User size={18} color="#1e3a5f" /><span>{waitlistSlot.instructor?.first_name} {waitlistSlot.instructor?.last_name}</span></div>
+            </div>
+          </>
+        )}
       </Modal>
     </>
   );
