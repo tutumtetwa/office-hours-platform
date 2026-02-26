@@ -9,7 +9,9 @@ const router = express.Router();
 // Get all users
 router.get('/users', authenticateToken, authorize('admin'), async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, email, first_name, last_name, role, department, is_active, created_at FROM users ORDER BY created_at DESC');
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name, role, department, is_active, created_at FROM users ORDER BY created_at DESC'
+    );
     res.json({ users: result.rows });
   } catch (error) {
     console.error('Get users error:', error);
@@ -21,18 +23,41 @@ router.get('/users', authenticateToken, authorize('admin'), async (req, res) => 
 router.post('/users', authenticateToken, authorize('admin'), async (req, res) => {
   try {
     const { email, password, first_name, last_name, role, department } = req.body;
+    
+    // Check if email exists
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Email already exists' });
+    }
+    
     const hashedPassword = bcrypt.hashSync(password, 10);
     const userId = uuidv4();
     
     await pool.query(
       'INSERT INTO users (id, email, password, first_name, last_name, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [userId, email, hashedPassword, first_name, last_name, role, department]
+      [userId, email, hashedPassword, first_name, last_name, role || 'student', department]
     );
     
     res.status(201).json({ message: 'User created', user: { id: userId, email, first_name, last_name, role } });
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Get single user
+router.get('/users/:id', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name, role, department, is_active FROM users WHERE id = $1',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ user: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch user' });
   }
 });
 
@@ -71,18 +96,30 @@ router.post('/users/:id/reactivate', authenticateToken, authorize('admin'), asyn
   }
 });
 
-// Get stats
+// Get stats - FIXED
 router.get('/stats', authenticateToken, authorize('admin'), async (req, res) => {
   try {
-    const users = await pool.query('SELECT COUNT(*) as count FROM users');
-    const appointments = await pool.query('SELECT COUNT(*) as count FROM appointments');
-    const today = await pool.query("SELECT COUNT(*) as count FROM appointments WHERE date = CURRENT_DATE");
+    const totalUsers = await pool.query('SELECT COUNT(*)::int as count FROM users');
+    const students = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE role = 'student'");
+    const instructors = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE role = 'instructor'");
+    const admins = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE role = 'admin'");
+    const activeUsers = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE is_active = 1");
+    const totalAppointments = await pool.query('SELECT COUNT(*)::int as count FROM appointments');
+    const completedAppointments = await pool.query("SELECT COUNT(*)::int as count FROM appointments WHERE status = 'completed'");
+    const cancelledAppointments = await pool.query("SELECT COUNT(*)::int as count FROM appointments WHERE status = 'cancelled'");
+    
     res.json({
-      total_users: parseInt(users.rows[0].count),
-      total_appointments: parseInt(appointments.rows[0].count),
-      today_appointments: parseInt(today.rows[0].count)
+      total_users: totalUsers.rows[0].count,
+      students: students.rows[0].count,
+      instructors: instructors.rows[0].count,
+      admins: admins.rows[0].count,
+      active_users: activeUsers.rows[0].count,
+      total_appointments: totalAppointments.rows[0].count,
+      completed_appointments: completedAppointments.rows[0].count,
+      cancelled_appointments: cancelledAppointments.rows[0].count
     });
   } catch (error) {
+    console.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
@@ -90,10 +127,27 @@ router.get('/stats', authenticateToken, authorize('admin'), async (req, res) => 
 // Get audit logs
 router.get('/audit-logs', authenticateToken, authorize('admin'), async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100');
+    const result = await pool.query(`
+      SELECT al.*, u.first_name, u.last_name, u.email 
+      FROM audit_logs al 
+      LEFT JOIN users u ON al.user_id = u.id 
+      ORDER BY al.created_at DESC 
+      LIMIT 100
+    `);
     res.json({ logs: result.rows });
   } catch (error) {
+    console.error('Get audit logs error:', error);
     res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+// Get departments
+router.get('/departments', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT DISTINCT department FROM users WHERE department IS NOT NULL');
+    res.json({ departments: result.rows.map(r => r.department) });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch departments' });
   }
 });
 
