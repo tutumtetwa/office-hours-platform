@@ -5,10 +5,16 @@ const { authenticateToken, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get available slots - includes booking status
+// Get available slots - excludes past slots
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { date, instructor_id } = req.query;
+    
+    // Get current date and time in UTC
+    const now = new Date();
+    const currentDate = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM format
+    
     let query = `
       SELECT s.*, 
         u.first_name, u.last_name, u.department,
@@ -22,9 +28,12 @@ router.get('/', authenticateToken, async (req, res) => {
         ) as booked_by_student_id
       FROM availability_slots s
       JOIN users u ON s.instructor_id = u.id
-      WHERE s.date >= CURRENT_DATE
+      WHERE (
+        s.date > $1 
+        OR (s.date = $1 AND s.start_time > $2)
+      )
     `;
-    const params = [];
+    const params = [currentDate, currentTime];
     
     if (date) {
       params.push(date);
@@ -74,18 +83,23 @@ router.get('/instructors', authenticateToken, async (req, res) => {
   }
 });
 
-// Get my slots (instructor)
+// Get my slots (instructor) - shows all future slots including today's past times for management
 router.get('/my-slots', authenticateToken, authorize('instructor', 'admin'), async (req, res) => {
   try {
+    const now = new Date();
+    const currentDate = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
+    
     const result = await pool.query(`
       SELECT s.*,
         CASE WHEN EXISTS (
           SELECT 1 FROM appointments a WHERE a.slot_id = s.id AND a.status = 'scheduled'
-        ) THEN true ELSE false END as is_booked
+        ) THEN true ELSE false END as is_booked,
+        CASE WHEN s.date < $1 OR (s.date = $1 AND s.start_time <= $2) THEN true ELSE false END as is_past
       FROM availability_slots s 
-      WHERE s.instructor_id = $1 AND s.date >= CURRENT_DATE 
+      WHERE s.instructor_id = $3 AND s.date >= $1
       ORDER BY s.date, s.start_time
-    `, [req.user.id]);
+    `, [currentDate, currentTime, req.user.id]);
     res.json({ slots: result.rows });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch slots' });
@@ -96,6 +110,14 @@ router.get('/my-slots', authenticateToken, authorize('instructor', 'admin'), asy
 router.post('/', authenticateToken, authorize('instructor', 'admin'), async (req, res) => {
   try {
     const { date, start_time, end_time, location, meeting_type, notes } = req.body;
+    
+    // Validate not in the past
+    const now = new Date();
+    const slotDateTime = new Date(`${date}T${start_time}`);
+    if (slotDateTime <= now) {
+      return res.status(400).json({ error: 'Cannot create slots in the past' });
+    }
+    
     const slotId = uuidv4();
     
     await pool.query(
@@ -115,14 +137,18 @@ router.post('/bulk', authenticateToken, authorize('instructor', 'admin'), async 
   try {
     const { slots } = req.body;
     let created = 0;
+    const now = new Date();
     
     for (const slot of slots) {
-      const slotId = uuidv4();
-      await pool.query(
-        'INSERT INTO availability_slots (id, instructor_id, date, start_time, end_time, location, meeting_type) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [slotId, req.user.id, slot.date, slot.start_time, slot.end_time, slot.location, slot.meeting_type || 'either']
-      );
-      created++;
+      const slotDateTime = new Date(`${slot.date}T${slot.start_time}`);
+      if (slotDateTime > now) {
+        const slotId = uuidv4();
+        await pool.query(
+          'INSERT INTO availability_slots (id, instructor_id, date, start_time, end_time, location, meeting_type) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [slotId, req.user.id, slot.date, slot.start_time, slot.end_time, slot.location, slot.meeting_type || 'either']
+        );
+        created++;
+      }
     }
     
     res.status(201).json({ message: `${created} slots created`, slots_created: created });
