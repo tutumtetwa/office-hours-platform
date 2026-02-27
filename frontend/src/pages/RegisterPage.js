@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { GraduationCap, Mail, Lock, User, Building, AlertCircle, CheckCircle } from 'lucide-react';
+import { GraduationCap, Mail, Lock, User, Building, Phone, AlertCircle, CheckCircle } from 'lucide-react';
 import { Spinner, FormSelect } from '../components/UI';
 
 const RegisterPage = () => {
@@ -11,6 +11,7 @@ const RegisterPage = () => {
     confirmPassword: '',
     first_name: '',
     last_name: '',
+    phone_number: '',
     role: 'student',
     department: ''
   });
@@ -24,6 +25,19 @@ const RegisterPage = () => {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
+  };
+
+  // Format phone number as user types
+  const formatPhoneNumber = (value) => {
+    const cleaned = value.replace(/\D/g, '');
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+  };
+
+  const handlePhoneChange = (e) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    setFormData({ ...formData, phone_number: formatted });
   };
 
   const handleSubmit = async (e) => {
@@ -45,6 +59,9 @@ const RegisterPage = () => {
     setLoading(true);
 
     const { confirmPassword, ...userData } = formData;
+    // Clean phone number - only send digits
+    userData.phone_number = userData.phone_number.replace(/\D/g, '');
+    
     const result = await register(userData);
     
     if (result.success) {
@@ -163,6 +180,36 @@ const RegisterPage = () => {
                 style={{ paddingLeft: '40px' }}
               />
             </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">
+              Phone Number <span style={{ fontWeight: 'normal', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>(optional)</span>
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Phone 
+                size={18} 
+                style={{ 
+                  position: 'absolute', 
+                  left: '12px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)',
+                  color: 'var(--color-text-muted)'
+                }} 
+              />
+              <input
+                type="tel"
+                name="phone_number"
+                className="form-input"
+                placeholder="(555) 123-4567"
+                value={formData.phone_number}
+                onChange={handlePhoneChange}
+                style={{ paddingLeft: '40px' }}
+              />
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+              For SMS reminders and password reset
+            </p>
           </div>
 
           <div className="form-row">

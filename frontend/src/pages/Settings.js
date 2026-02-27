@@ -1,206 +1,302 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Phone, Bell, Shield, Save, Check } from 'lucide-react';
+import { PageHeader, Card, Alert, Spinner, FormInput } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
-import { User, Lock, Building, Mail } from 'lucide-react';
-import { PageHeader, Card, FormInput, Alert, Spinner, RoleBadge } from '../components/UI';
+import api from '../utils/api';
 
 const Settings = () => {
-  const { user, updateProfile, updatePassword } = useAuth();
+  const { user, updateUser } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   
-  const [profileData, setProfileData] = useState({
-    first_name: user?.first_name || '',
-    last_name: user?.last_name || '',
-    department: user?.department || ''
+  // Profile form
+  const [profile, setProfile] = useState({
+    first_name: '',
+    last_name: '',
+    phone_number: '',
+    department: '',
+    email_notifications: true,
+    sms_notifications: true
   });
   
-  const [passwordData, setPasswordData] = useState({
+  // Password form
+  const [passwords, setPasswords] = useState({
     current_password: '',
     new_password: '',
     confirm_password: ''
   });
 
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [profileSuccess, setProfileSuccess] = useState('');
-  const [profileError, setProfileError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  const handleProfileSubmit = async (e) => {
-    e.preventDefault();
-    setProfileLoading(true);
-    setProfileError('');
-    setProfileSuccess('');
-
-    const result = await updateProfile(profileData);
-    
-    if (result.success) {
-      setProfileSuccess('Profile updated successfully');
-      setTimeout(() => setProfileSuccess(''), 3000);
-    } else {
-      setProfileError(result.error);
+  useEffect(() => {
+    if (user) {
+      setProfile({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        phone_number: formatPhoneDisplay(user.phone_number) || '',
+        department: user.department || '',
+        email_notifications: user.email_notifications !== 0,
+        sms_notifications: user.sms_notifications !== 0
+      });
     }
-    
-    setProfileLoading(false);
+  }, [user]);
+
+  // Format phone for display
+  function formatPhoneDisplay(phone) {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+    }
+    return phone;
+  }
+
+  // Handle profile update
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await api.put('/auth/profile', {
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        phone_number: profile.phone_number.replace(/\D/g, ''),
+        department: profile.department,
+        email_notifications: profile.email_notifications ? 1 : 0,
+        sms_notifications: profile.sms_notifications ? 1 : 0
+      });
+      
+      if (updateUser && res.data.user) {
+        updateUser(res.data.user);
+      }
+      
+      setSuccess('Profile updated successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to update profile');
+    }
+    setSaving(false);
   };
 
-  const handlePasswordSubmit = async (e) => {
+  // Handle password change
+  const handleChangePassword = async (e) => {
     e.preventDefault();
-    setPasswordLoading(true);
-    setPasswordError('');
-    setPasswordSuccess('');
+    setSaving(true);
+    setError('');
+    setSuccess('');
 
-    if (passwordData.new_password !== passwordData.confirm_password) {
-      setPasswordError('New passwords do not match');
-      setPasswordLoading(false);
+    if (passwords.new_password !== passwords.confirm_password) {
+      setError('New passwords do not match');
+      setSaving(false);
       return;
     }
 
-    if (passwordData.new_password.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
-      setPasswordLoading(false);
+    if (passwords.new_password.length < 6) {
+      setError('Password must be at least 6 characters');
+      setSaving(false);
       return;
     }
 
-    const result = await updatePassword(passwordData.current_password, passwordData.new_password);
-    
-    if (result.success) {
-      setPasswordSuccess('Password updated successfully');
-      setPasswordData({ current_password: '', new_password: '', confirm_password: '' });
-      setTimeout(() => setPasswordSuccess(''), 3000);
-    } else {
-      setPasswordError(result.error);
+    try {
+      await api.put('/auth/password', {
+        current_password: passwords.current_password,
+        new_password: passwords.new_password
+      });
+      
+      setSuccess('Password changed successfully!');
+      setPasswords({ current_password: '', new_password: '', confirm_password: '' });
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to change password');
     }
-    
-    setPasswordLoading(false);
+    setSaving(false);
   };
 
   return (
     <>
-      <PageHeader 
-        title="Settings"
-        subtitle="Manage your account settings"
-      />
+      <PageHeader title="Settings" subtitle="Manage your account preferences" />
       
       <div className="page-content">
-        <div style={{ display: 'grid', gap: 'var(--space-xl)', maxWidth: '800px' }}>
-          
-          {/* Account Info */}
-          <Card title="Account Information">
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 'var(--space-lg)',
-              padding: 'var(--space-lg)',
-              background: 'var(--color-bg)',
-              borderRadius: 'var(--radius-md)',
-              marginBottom: 'var(--space-lg)'
-            }}>
-              <div style={{
-                width: 64,
-                height: 64,
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--color-accent)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.5rem',
-                fontWeight: 600,
-                color: 'var(--color-primary-dark)'
-              }}>
-                {user?.first_name?.[0]}{user?.last_name?.[0]}
-              </div>
-              <div>
-                <h3 style={{ marginBottom: 'var(--space-xs)' }}>
-                  {user?.first_name} {user?.last_name}
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-                  <span className="text-secondary">{user?.email}</span>
-                  <RoleBadge role={user?.role} />
+        {error && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
+        {success && <Alert type="success" onClose={() => setSuccess('')}>{success}</Alert>}
+
+        <div style={{ display: 'grid', gap: '1.5rem', maxWidth: '800px' }}>
+          {/* Profile Settings */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <User size={24} color="#1e3a5f" />
+              <h3 style={{ color: '#1e3a5f', margin: 0 }}>Profile Information</h3>
+            </div>
+            
+            <form onSubmit={handleUpdateProfile}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    value={profile.first_name}
+                    onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={profile.last_name}
+                    onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
+                  />
                 </div>
               </div>
-            </div>
-          </Card>
 
-          {/* Profile Settings */}
-          <Card title="Profile Settings">
-            {profileSuccess && <Alert type="success">{profileSuccess}</Alert>}
-            {profileError && <Alert type="error">{profileError}</Alert>}
-            
-            <form onSubmit={handleProfileSubmit}>
-              <div className="form-row">
-                <FormInput
-                  label="First Name"
-                  value={profileData.first_name}
-                  onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
-                  required
+              <div style={{ marginTop: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                  <Mail size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={user?.email || ''}
+                  disabled
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd', background: '#f5f5f5', color: '#888' }}
                 />
-                <FormInput
-                  label="Last Name"
-                  value={profileData.last_name}
-                  onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
-                  required
+                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>Contact admin to change email</p>
+              </div>
+
+              <div style={{ marginTop: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                  <Phone size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={profile.phone_number}
+                  onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
+                  placeholder="(555) 123-4567"
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
+                />
+                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>Used for SMS notifications and password reset</p>
+              </div>
+
+              <div style={{ marginTop: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                  Department
+                </label>
+                <input
+                  type="text"
+                  value={profile.department}
+                  onChange={(e) => setProfile({ ...profile, department: e.target.value })}
+                  placeholder="e.g., Computer Science"
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
                 />
               </div>
-              
-              <FormInput
-                label="Department"
-                value={profileData.department}
-                onChange={(e) => setProfileData({ ...profileData, department: e.target.value })}
-                placeholder="e.g., Computer Science"
-              />
 
-              <button 
-                type="submit" 
-                className="btn btn-primary"
-                disabled={profileLoading}
-              >
-                {profileLoading ? <Spinner size={18} /> : 'Save Changes'}
+              <button type="submit" className="btn btn-primary" style={{ marginTop: '1.5rem' }} disabled={saving}>
+                {saving ? <Spinner size={18} /> : <><Save size={18} /> Save Changes</>}
               </button>
             </form>
+          </Card>
+
+          {/* Notification Preferences */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <Bell size={24} color="#1e3a5f" />
+              <h3 style={{ color: '#1e3a5f', margin: 0 }}>Notification Preferences</h3>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={profile.email_notifications}
+                  onChange={(e) => setProfile({ ...profile, email_notifications: e.target.checked })}
+                  style={{ width: '20px', height: '20px', accentColor: '#c9a227' }}
+                />
+                <div>
+                  <div style={{ fontWeight: '500', color: '#1e3a5f' }}>Email Notifications</div>
+                  <div style={{ fontSize: '0.85rem', color: '#666' }}>Receive appointment reminders and updates via email</div>
+                </div>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={profile.sms_notifications}
+                  onChange={(e) => setProfile({ ...profile, sms_notifications: e.target.checked })}
+                  style={{ width: '20px', height: '20px', accentColor: '#c9a227' }}
+                />
+                <div>
+                  <div style={{ fontWeight: '500', color: '#1e3a5f' }}>SMS Notifications</div>
+                  <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                    Receive text message reminders 
+                    {!profile.phone_number && <span style={{ color: '#f57c00' }}> (Add phone number above)</span>}
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <button onClick={handleUpdateProfile} className="btn btn-primary" style={{ marginTop: '1.5rem' }} disabled={saving}>
+              {saving ? <Spinner size={18} /> : <><Save size={18} /> Save Preferences</>}
+            </button>
           </Card>
 
           {/* Change Password */}
-          <Card title="Change Password">
-            {passwordSuccess && <Alert type="success">{passwordSuccess}</Alert>}
-            {passwordError && <Alert type="error">{passwordError}</Alert>}
-            
-            <form onSubmit={handlePasswordSubmit}>
-              <FormInput
-                label="Current Password"
-                type="password"
-                value={passwordData.current_password}
-                onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
-                required
-              />
-              
-              <div className="form-row">
-                <FormInput
-                  label="New Password"
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <Shield size={24} color="#1e3a5f" />
+              <h3 style={{ color: '#1e3a5f', margin: 0 }}>Change Password</h3>
+            </div>
+
+            <form onSubmit={handleChangePassword}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                  Current Password
+                </label>
+                <input
                   type="password"
-                  value={passwordData.new_password}
-                  onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
-                  required
-                  hint="At least 8 characters"
-                />
-                <FormInput
-                  label="Confirm New Password"
-                  type="password"
-                  value={passwordData.confirm_password}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
-                  required
+                  value={passwords.current_password}
+                  onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
                 />
               </div>
 
-              <button 
-                type="submit" 
-                className="btn btn-primary"
-                disabled={passwordLoading}
-              >
-                {passwordLoading ? <Spinner size={18} /> : 'Update Password'}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={passwords.new_password}
+                    onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={passwords.confirm_password}
+                    onChange={(e) => setPasswords({ ...passwords, confirm_password: e.target.value })}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="btn btn-primary" style={{ marginTop: '1.5rem' }} disabled={saving}>
+                {saving ? <Spinner size={18} /> : 'Change Password'}
               </button>
             </form>
           </Card>
-
         </div>
       </div>
     </>

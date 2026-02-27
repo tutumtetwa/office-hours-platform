@@ -15,6 +15,7 @@ import History from './pages/History';
 import Settings from './pages/Settings';
 import AdminUsers from './pages/AdminUsers';
 import AdminLogs from './pages/AdminLogs';
+import ForgotPassword from './pages/ForgotPassword';
 
 // Components
 import Layout from './components/Layout';
@@ -85,6 +86,8 @@ function AppRoutes() {
       <Route path="/register" element={
         <PublicRoute><RegisterPage /></PublicRoute>
       } />
+
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Protected Routes - All Users */}
       <Route path="/dashboard" element={

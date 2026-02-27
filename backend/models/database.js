@@ -11,19 +11,16 @@ const pool = new Pool({
 const db = {
   query: (text, params) => pool.query(text, params),
   
-  // Get single row
   async get(sql, params = []) {
     const result = await pool.query(sql, params);
     return result.rows[0];
   },
   
-  // Get all rows
   async all(sql, params = []) {
     const result = await pool.query(sql, params);
     return result.rows;
   },
   
-  // Run insert/update/delete
   async run(sql, params = []) {
     const result = await pool.query(sql, params);
     return { changes: result.rowCount, lastID: result.rows[0]?.id };
@@ -32,7 +29,7 @@ const db = {
 
 async function initializeDatabase() {
   try {
-    // Create tables
+    // Create users table with phone_number and notification preferences
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(255) PRIMARY KEY,
@@ -40,11 +37,49 @@ async function initializeDatabase() {
         password VARCHAR(255) NOT NULL,
         first_name VARCHAR(255) NOT NULL,
         last_name VARCHAR(255) NOT NULL,
+        phone_number VARCHAR(20),
         role VARCHAR(50) DEFAULT 'student',
         department VARCHAR(255),
         is_active INTEGER DEFAULT 1,
+        email_notifications INTEGER DEFAULT 1,
+        sms_notifications INTEGER DEFAULT 1,
+        reminder_24h INTEGER DEFAULT 1,
+        reminder_1h INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        updated_at TIMESTAMP DEFAULT NOW(),
+        last_login TIMESTAMP
+      )
+    `);
+
+    // Add phone_number column if it doesn't exist (for existing databases)
+    await pool.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'phone_number') THEN
+          ALTER TABLE users ADD COLUMN phone_number VARCHAR(20);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'sms_notifications') THEN
+          ALTER TABLE users ADD COLUMN sms_notifications INTEGER DEFAULT 1;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'email_notifications') THEN
+          ALTER TABLE users ADD COLUMN email_notifications INTEGER DEFAULT 1;
+        END IF;
+      END $$;
+    `);
+
+    // Create password_resets table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL UNIQUE,
+        temp_token VARCHAR(255),
+        code VARCHAR(10),
+        code_sent_via VARCHAR(20),
+        code_sent_at TIMESTAMP,
+        reset_token VARCHAR(255),
+        verified BOOLEAN DEFAULT false,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
@@ -105,8 +140,6 @@ async function initializeDatabase() {
         id VARCHAR(255) PRIMARY KEY,
         user_id VARCHAR(255),
         action VARCHAR(255),
-        entity_type VARCHAR(255),
-        entity_id VARCHAR(255),
         details TEXT,
         ip_address VARCHAR(255),
         user_agent TEXT,
@@ -156,7 +189,7 @@ async function initializeDatabase() {
     // Create demo users if they don't exist
     await createDemoUsers();
     
-    console.log('✅ PostgreSQL initialized');
+    console.log('✅ PostgreSQL initialized with phone support');
   } catch (err) {
     console.error('DB init error:', err);
   }
@@ -164,18 +197,18 @@ async function initializeDatabase() {
 
 async function createDemoUsers() {
   const users = [
-    { email: 'admin@university.edu', password: 'admin123', first_name: 'System', last_name: 'Administrator', role: 'admin', department: 'IT Services' },
-    { email: 'prof.smith@university.edu', password: 'instructor123', first_name: 'Sarah', last_name: 'Smith', role: 'instructor', department: 'Computer Science' },
-    { email: 'prof.johnson@university.edu', password: 'instructor123', first_name: 'Michael', last_name: 'Johnson', role: 'instructor', department: 'Mathematics' },
-    { email: 'student@university.edu', password: 'student123', first_name: 'Alex', last_name: 'Student', role: 'student', department: 'Computer Science' }
+    { email: 'admin@university.edu', password: 'admin123', first_name: 'System', last_name: 'Administrator', role: 'admin', department: 'IT Services', phone_number: '5551234567' },
+    { email: 'prof.smith@university.edu', password: 'instructor123', first_name: 'Sarah', last_name: 'Smith', role: 'instructor', department: 'Computer Science', phone_number: '5552345678' },
+    { email: 'prof.johnson@university.edu', password: 'instructor123', first_name: 'Michael', last_name: 'Johnson', role: 'instructor', department: 'Mathematics', phone_number: '5553456789' },
+    { email: 'student@university.edu', password: 'student123', first_name: 'Alex', last_name: 'Student', role: 'student', department: 'Computer Science', phone_number: '5554567890' }
   ];
 
   for (const user of users) {
     const exists = await pool.query('SELECT id FROM users WHERE email = $1', [user.email]);
     if (exists.rows.length === 0) {
       await pool.query(
-        'INSERT INTO users (id, email, password, first_name, last_name, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [uuidv4(), user.email, bcrypt.hashSync(user.password, 10), user.first_name, user.last_name, user.role, user.department]
+        'INSERT INTO users (id, email, password, first_name, last_name, phone_number, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [uuidv4(), user.email, bcrypt.hashSync(user.password, 10), user.first_name, user.last_name, user.phone_number, user.role, user.department]
       );
       console.log(`Created user: ${user.email}`);
     }

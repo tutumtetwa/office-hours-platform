@@ -37,13 +37,21 @@ async function logAction(userId, action, details = {}, req = null) {
   }
 }
 
-// Register
+// Register - now includes phone number
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, first_name, last_name, role = 'student', department } = req.body;
+    const { email, password, first_name, last_name, phone_number, role = 'student', department } = req.body;
 
     if (!email || !password || !first_name || !last_name) {
-      return res.status(400).json({ error: 'All fields are required' });
+      return res.status(400).json({ error: 'Email, password, first name, and last name are required' });
+    }
+
+    // Validate phone number format if provided
+    if (phone_number) {
+      const cleanedPhone = phone_number.replace(/\D/g, '');
+      if (cleanedPhone.length < 10 || cleanedPhone.length > 15) {
+        return res.status(400).json({ error: 'Invalid phone number format' });
+      }
     }
 
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
@@ -54,19 +62,22 @@ router.post('/register', async (req, res) => {
     const hashedPassword = bcrypt.hashSync(password, 10);
     const userId = uuidv4();
 
+    // Clean phone number - store only digits
+    const cleanPhone = phone_number ? phone_number.replace(/\D/g, '') : null;
+
     await pool.query(
-      'INSERT INTO users (id, email, password, first_name, last_name, role, department, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())',
-      [userId, email, hashedPassword, first_name, last_name, role, department]
+      'INSERT INTO users (id, email, password, first_name, last_name, phone_number, role, department, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
+      [userId, email, hashedPassword, first_name, last_name, cleanPhone, role, department]
     );
 
-    await logAction(userId, 'USER_REGISTERED', { email, role }, req);
+    await logAction(userId, 'USER_REGISTERED', { email, role, has_phone: !!phone_number }, req);
 
     const token = jwt.sign({ id: userId, email, role }, JWT_SECRET, { expiresIn: '24h' });
 
     res.status(201).json({
       message: 'Registration successful',
       token,
-      user: { id: userId, email, first_name, last_name, role, department }
+      user: { id: userId, email, first_name, last_name, phone_number: cleanPhone, role, department }
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -109,6 +120,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
+        phone_number: user.phone_number,
         role: user.role,
         department: user.department
       }
@@ -123,7 +135,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, first_name, last_name, role, department FROM users WHERE id = $1',
+      'SELECT id, email, first_name, last_name, phone_number, role, department, sms_notifications, email_notifications FROM users WHERE id = $1',
       [req.user.id]
     );
     
@@ -138,18 +150,36 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 });
 
-// Update profile
+// Update profile - now includes phone number
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
-    const { first_name, last_name, department } = req.body;
+    const { first_name, last_name, phone_number, department, email_notifications, sms_notifications } = req.body;
+    
+    // Clean phone number
+    const cleanPhone = phone_number ? phone_number.replace(/\D/g, '') : null;
     
     await pool.query(
-      'UPDATE users SET first_name = $1, last_name = $2, department = $3, updated_at = NOW() WHERE id = $4',
-      [first_name, last_name, department, req.user.id]
+      `UPDATE users SET 
+        first_name = COALESCE($1, first_name), 
+        last_name = COALESCE($2, last_name), 
+        phone_number = $3,
+        department = COALESCE($4, department),
+        email_notifications = COALESCE($5, email_notifications),
+        sms_notifications = COALESCE($6, sms_notifications),
+        updated_at = NOW() 
+       WHERE id = $7`,
+      [first_name, last_name, cleanPhone, department, email_notifications, sms_notifications, req.user.id]
     );
 
-    await logAction(req.user.id, 'PROFILE_UPDATED', { first_name, last_name, department }, req);
-    res.json({ message: 'Profile updated' });
+    await logAction(req.user.id, 'PROFILE_UPDATED', { first_name, last_name, has_phone: !!phone_number }, req);
+    
+    // Return updated user
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name, phone_number, role, department, email_notifications, sms_notifications FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    
+    res.json({ message: 'Profile updated', user: result.rows[0] });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
@@ -160,6 +190,14 @@ router.put('/profile', authenticateToken, async (req, res) => {
 router.put('/password', authenticateToken, async (req, res) => {
   try {
     const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'Current and new password are required' });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
 
     const result = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
     const user = result.rows[0];
