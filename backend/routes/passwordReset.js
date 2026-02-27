@@ -3,12 +3,37 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../models/database');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const router = express.Router();
 
 // Generate 6-digit code
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Create reusable transporter at startup
+let transporter = null;
+if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+  console.log('Setting up Gmail transporter...');
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+  
+  // Verify connection
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error('❌ SMTP Connection Error:', error.message);
+    } else {
+      console.log('✅ Gmail SMTP is ready to send emails');
+    }
+  });
+} else {
+  console.log('⚠️ No SMTP credentials - running in dev mode');
 }
 
 // Request password reset - Step 1
@@ -20,7 +45,6 @@ router.post('/request', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Find user
     const userResult = await pool.query(
       'SELECT id, email, phone_number, first_name FROM users WHERE email = $1 AND is_active = 1',
       [email]
@@ -35,7 +59,6 @@ router.post('/request', async (req, res) => {
 
     const user = userResult.rows[0];
     
-    // Determine available reset methods
     const methods = [];
     methods.push({ type: 'email', masked: maskEmail(user.email) });
     
@@ -100,28 +123,30 @@ router.post('/send-code', async (req, res) => {
       
       const sent = await sendEmailCode(reset.email, reset.first_name, code);
       
-      if (!sent) {
+      if (sent) {
+        console.log('=== EMAIL SENT SUCCESSFULLY ===');
+        return res.json({ 
+          message: `Reset code sent to ${maskEmail(reset.email)}`,
+          method: 'email'
+        });
+      } else {
         console.log('=== EMAIL FAILED ===');
-        return res.status(500).json({ error: 'Failed to send email. Check server logs.' });
+        return res.status(500).json({ error: 'Failed to send email. Please try again.' });
       }
-      
-      console.log('=== EMAIL SENT SUCCESSFULLY ===');
-      res.json({ 
-        message: `Reset code sent to ${maskEmail(reset.email)}`,
-        method: 'email'
-      });
     } else if (method === 'sms') {
       if (!reset.phone_number) {
         return res.status(400).json({ error: 'No phone number on file' });
       }
+      
       const sent = await sendSMSCode(reset.phone_number, code);
-      if (!sent) {
+      if (sent) {
+        return res.json({ 
+          message: `Reset code sent to ${maskPhone(reset.phone_number)}`,
+          method: 'sms'
+        });
+      } else {
         return res.status(500).json({ error: 'Failed to send SMS. Please try email.' });
       }
-      res.json({ 
-        message: `Reset code sent to ${maskPhone(reset.phone_number)}`,
-        method: 'sms'
-      });
     } else {
       return res.status(400).json({ error: 'Invalid method' });
     }
@@ -226,41 +251,26 @@ function maskPhone(phone) {
   return '***-***-' + cleaned.slice(-4);
 }
 
-// Email sending function using nodemailer
+// Email sending function
 async function sendEmailCode(email, firstName, code) {
-  console.log('sendEmailCode called');
-  console.log('SMTP_HOST:', process.env.SMTP_HOST);
-  console.log('SMTP_PORT:', process.env.SMTP_PORT);
-  console.log('SMTP_USER:', process.env.SMTP_USER);
-  console.log('SMTP_FROM:', process.env.SMTP_FROM);
-  console.log('SMTP_PASS exists:', !!process.env.SMTP_PASS);
-  
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  // Dev mode - no SMTP configured
+  if (!transporter) {
     console.log('[DEV MODE] No SMTP configured');
-    console.log('Code for', email, ':', code);
+    console.log('========================================');
+    console.log('EMAIL CODE:', code);
+    console.log('FOR:', email);
+    console.log('========================================');
     return true;
   }
 
   try {
-    const nodemailer = require('nodemailer');
+    console.log('Sending via Gmail service...');
     
-    console.log('Creating transporter...');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT) || 587,
-      secure: false, // Use TLS
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-
-    console.log('Sending email...');
     const info = await transporter.sendMail({
       from: `"Office Hours" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
       to: email,
       subject: 'Password Reset Code - Office Hours',
-      text: `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.`,
+      text: `Hi ${firstName || 'there'},\n\nYour password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, please ignore this email.`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h1 style="color: #1e3a5f; text-align: center;">📅 Office Hours</h1>
@@ -275,26 +285,28 @@ async function sendEmailCode(email, firstName, code) {
         </div>
       `
     });
-    
-    console.log('Email sent! Message ID:', info.messageId);
+
+    console.log('✅ Email sent! Message ID:', info.messageId);
     return true;
+    
   } catch (error) {
-    console.error('=== NODEMAILER ERROR ===');
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Error code:', error.code);
-    console.error('Full error:', error);
+    console.error('❌ EMAIL ERROR:', error.message);
+    if (error.code) console.error('Error code:', error.code);
+    if (error.response) console.error('Response:', error.response);
     return false;
   }
 }
 
 // SMS sending function
 async function sendSMSCode(phone, code) {
-  console.log('sendSMSCode called for:', phone);
+  console.log('Sending SMS to:', phone);
   
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
     console.log('[DEV MODE] No Twilio configured');
-    console.log('SMS Code for', phone, ':', code);
+    console.log('========================================');
+    console.log('SMS CODE:', code);
+    console.log('FOR:', phone);
+    console.log('========================================');
     return true;
   }
 
@@ -310,16 +322,16 @@ async function sendSMSCode(phone, code) {
       formattedPhone = '+' + formattedPhone;
     }
 
-    await client.messages.create({
+    const message = await client.messages.create({
       body: `Your Office Hours password reset code is: ${code}. Expires in 10 minutes.`,
       from: process.env.TWILIO_PHONE_NUMBER,
       to: formattedPhone
     });
     
-    console.log('SMS sent to:', formattedPhone);
+    console.log('✅ SMS sent! SID:', message.sid);
     return true;
   } catch (error) {
-    console.error('Twilio error:', error.message);
+    console.error('❌ Twilio error:', error.message);
     return false;
   }
 }
