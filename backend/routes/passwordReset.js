@@ -3,37 +3,12 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../models/database');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 
 const router = express.Router();
 
 // Generate 6-digit code
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Create reusable transporter at startup
-let transporter = null;
-if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-  console.log('Setting up Gmail transporter...');
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-  
-  // Verify connection
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('❌ SMTP Connection Error:', error.message);
-    } else {
-      console.log('✅ Gmail SMTP is ready to send emails');
-    }
-  });
-} else {
-  console.log('⚠️ No SMTP credentials - running in dev mode');
 }
 
 // Request password reset - Step 1
@@ -251,50 +226,82 @@ function maskPhone(phone) {
   return '***-***-' + cleaned.slice(-4);
 }
 
-// Email sending function
+// Email sending function using Resend API (works from cloud environments)
 async function sendEmailCode(email, firstName, code) {
-  // Dev mode - no SMTP configured
-  if (!transporter) {
-    console.log('[DEV MODE] No SMTP configured');
-    console.log('========================================');
-    console.log('EMAIL CODE:', code);
-    console.log('FOR:', email);
-    console.log('========================================');
-    return true;
+  // Check for Resend API key first (recommended for cloud)
+  if (process.env.RESEND_API_KEY) {
+    try {
+      console.log('Sending via Resend API...');
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.EMAIL_FROM || 'Office Hours <onboarding@resend.dev>',
+          to: email,
+          subject: 'Password Reset Code - Office Hours',
+          html: getEmailTemplate(firstName, code)
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        console.log('✅ Resend email sent! ID:', data.id);
+        return true;
+      } else {
+        console.error('❌ Resend error:', data);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Resend exception:', error.message);
+      return false;
+    }
   }
-
-  try {
-    console.log('Sending via Gmail service...');
-    
-    const info = await transporter.sendMail({
-      from: `"Office Hours" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-      to: email,
-      subject: 'Password Reset Code - Office Hours',
-      text: `Hi ${firstName || 'there'},\n\nYour password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, please ignore this email.`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h1 style="color: #1e3a5f; text-align: center;">📅 Office Hours</h1>
-          <h2 style="color: #1e3a5f;">Password Reset</h2>
-          <p>Hi ${firstName || 'there'},</p>
-          <p>You requested a password reset. Use this code:</p>
-          <div style="background: #f8f6f3; padding: 24px; text-align: center; border-radius: 12px; margin: 24px 0;">
-            <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1e3a5f;">${code}</span>
-          </div>
-          <p style="color: #666;">This code expires in <strong>10 minutes</strong>.</p>
-          <p style="color: #666;">If you didn't request this, ignore this email.</p>
-        </div>
-      `
-    });
-
-    console.log('✅ Email sent! Message ID:', info.messageId);
-    return true;
-    
-  } catch (error) {
-    console.error('❌ EMAIL ERROR:', error.message);
-    if (error.code) console.error('Error code:', error.code);
-    if (error.response) console.error('Response:', error.response);
-    return false;
+  
+  // Check for SendGrid API key
+  if (process.env.SENDGRID_API_KEY) {
+    try {
+      console.log('Sending via SendGrid API...');
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email }] }],
+          from: { email: process.env.EMAIL_FROM || 'noreply@officehours.app' },
+          subject: 'Password Reset Code - Office Hours',
+          content: [{ type: 'text/html', value: getEmailTemplate(firstName, code) }]
+        })
+      });
+      
+      if (response.ok || response.status === 202) {
+        console.log('✅ SendGrid email sent!');
+        return true;
+      } else {
+        const data = await response.json();
+        console.error('❌ SendGrid error:', data);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ SendGrid exception:', error.message);
+      return false;
+    }
   }
+  
+  // Dev mode - no email service configured
+  console.log('========================================');
+  console.log('[DEV MODE] No email service configured');
+  console.log('Set RESEND_API_KEY or SENDGRID_API_KEY');
+  console.log('========================================');
+  console.log('EMAIL CODE:', code);
+  console.log('FOR:', email);
+  console.log('========================================');
+  return true; // Return true in dev mode so testing can continue
 }
 
 // SMS sending function
@@ -302,6 +309,7 @@ async function sendSMSCode(phone, code) {
   console.log('Sending SMS to:', phone);
   
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
+    console.log('========================================');
     console.log('[DEV MODE] No Twilio configured');
     console.log('========================================');
     console.log('SMS CODE:', code);
@@ -334,6 +342,23 @@ async function sendSMSCode(phone, code) {
     console.error('❌ Twilio error:', error.message);
     return false;
   }
+}
+
+// Email template
+function getEmailTemplate(firstName, code) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h1 style="color: #1e3a5f; text-align: center;">📅 Office Hours</h1>
+      <h2 style="color: #1e3a5f;">Password Reset</h2>
+      <p>Hi ${firstName || 'there'},</p>
+      <p>You requested a password reset. Use this code:</p>
+      <div style="background: #f8f6f3; padding: 24px; text-align: center; border-radius: 12px; margin: 24px 0;">
+        <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1e3a5f;">${code}</span>
+      </div>
+      <p style="color: #666;">This code expires in <strong>10 minutes</strong>.</p>
+      <p style="color: #666;">If you didn't request this, ignore this email.</p>
+    </div>
+  `;
 }
 
 module.exports = router;
