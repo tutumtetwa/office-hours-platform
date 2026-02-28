@@ -44,7 +44,7 @@ router.post('/register', async (req, res) => {
 
     // Create user (no phone_number field)
     const result = await pool.query(
-      `INSERT INTO users (id, email, password_hash, first_name, last_name, role, department, is_active, created_at, updated_at)
+      `INSERT INTO users (id, email, password, first_name, last_name, role, department, is_active, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW(), NOW())
        RETURNING id, email, first_name, last_name, role, department, created_at`,
       [uuidv4(), email.toLowerCase(), passwordHash, first_name, last_name, role, department || null]
@@ -91,7 +91,7 @@ router.post('/login', async (req, res) => {
 
     // Find user
     const result = await pool.query(
-      'SELECT id, email, password_hash, first_name, last_name, role, department, is_active FROM users WHERE email = $1',
+      'SELECT id, email, password, first_name, last_name, role, department, is_active FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
 
@@ -107,7 +107,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {
       await logAction(user.id, 'LOGIN_FAILED', 'user', user.id, { reason: 'Invalid password' }, req.ip);
@@ -214,7 +214,7 @@ router.put('/password', authenticateToken, async (req, res) => {
 
     // Get current password hash
     const userResult = await pool.query(
-      'SELECT password_hash FROM users WHERE id = $1',
+      'SELECT password FROM users WHERE id = $1',
       [req.user.userId]
     );
 
@@ -223,7 +223,7 @@ router.put('/password', authenticateToken, async (req, res) => {
     }
 
     // Verify current password
-    const isValid = await bcrypt.compare(current_password, userResult.rows[0].password_hash);
+    const isValid = await bcrypt.compare(current_password, userResult.rows[0].password);
     if (!isValid) {
       return res.status(400).json({ error: 'Current password is incorrect' });
     }
@@ -234,7 +234,7 @@ router.put('/password', authenticateToken, async (req, res) => {
 
     // Update password
     await pool.query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2',
       [newHash, req.user.userId]
     );
 
