@@ -1,56 +1,37 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { GraduationCap, Mail, Lock, User, Building, Phone, AlertCircle, CheckCircle } from 'lucide-react';
-import { Spinner, FormSelect } from '../components/UI';
+import { Button, Input, Card, Alert, Select } from '../components/UI';
+import { authAPI } from '../utils/api';
 
 const RegisterPage = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
     first_name: '',
     last_name: '',
-    phone_number: '',
     role: 'student',
     department: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  
-  const { register } = useAuth();
-  const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError('');
-  };
-
-  // Format phone number as user types
-  const formatPhoneNumber = (value) => {
-    const cleaned = value.replace(/\D/g, '');
-    if (cleaned.length <= 3) return cleaned;
-    if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
-  };
-
-  const handlePhoneChange = (e) => {
-    const formatted = formatPhoneNumber(e.target.value);
-    setFormData({ ...formData, phone_number: formatted });
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    // Validate passwords match
+    // Validation
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
 
-    // Validate password strength
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters');
       return;
@@ -58,256 +39,117 @@ const RegisterPage = () => {
 
     setLoading(true);
 
-    const { confirmPassword, ...userData } = formData;
-    // Clean phone number - only send digits
-    userData.phone_number = userData.phone_number.replace(/\D/g, '');
-    
-    const result = await register(userData);
-    
-    if (result.success) {
-      setSuccess(true);
-      setTimeout(() => navigate('/login'), 2000);
-    } else {
-      setError(result.error);
+    try {
+      const { confirmPassword, ...registerData } = formData;
+      await authAPI.register(registerData);
+      navigate('/login', { state: { message: 'Registration successful! Please login.' } });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
-  if (success) {
-    return (
-      <div className="auth-container">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
-          <CheckCircle size={64} style={{ color: 'var(--color-success)', marginBottom: 'var(--space-lg)' }} />
-          <h2 style={{ marginBottom: 'var(--space-md)' }}>Registration Successful!</h2>
-          <p className="text-secondary">Redirecting to login...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <div className="auth-header">
-          <div className="auth-logo">
-            <GraduationCap size={32} />
-            <span>Office Hours</span>
-          </div>
-          <p className="auth-subtitle">Create your account</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <Card className="max-w-md w-full space-y-8 p-8">
+        <div>
+          <h2 className="text-center text-3xl font-extrabold text-gray-900">
+            Create Account
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Join the Office Hours Platform
+          </p>
         </div>
 
-        {error && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-sm)',
-            padding: 'var(--space-md)',
-            background: 'var(--color-error-bg)',
-            color: 'var(--color-error)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-lg)',
-            fontSize: '0.9375rem'
-          }}>
-            <AlertCircle size={18} />
-            {error}
-          </div>
-        )}
+        {error && <Alert type="error">{error}</Alert>}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">First Name</label>
-              <div style={{ position: 'relative' }}>
-                <User 
-                  size={18} 
-                  style={{ 
-                    position: 'absolute', 
-                    left: '12px', 
-                    top: '50%', 
-                    transform: 'translateY(-50%)',
-                    color: 'var(--color-text-muted)'
-                  }} 
-                />
-                <input
-                  type="text"
-                  name="first_name"
-                  className="form-input"
-                  placeholder="John"
-                  value={formData.first_name}
-                  onChange={handleChange}
-                  required
-                  style={{ paddingLeft: '40px' }}
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label required">Last Name</label>
-              <input
-                type="text"
-                name="last_name"
-                className="form-input"
-                placeholder="Doe"
-                value={formData.last_name}
-                onChange={handleChange}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label required">Email</label>
-            <div style={{ position: 'relative' }}>
-              <Mail 
-                size={18} 
-                style={{ 
-                  position: 'absolute', 
-                  left: '12px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)',
-                  color: 'var(--color-text-muted)'
-                }} 
-              />
-              <input
-                type="email"
-                name="email"
-                className="form-input"
-                placeholder="you@university.edu"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                style={{ paddingLeft: '40px' }}
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">
-              Phone Number <span style={{ fontWeight: 'normal', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>(optional)</span>
-            </label>
-            <div style={{ position: 'relative' }}>
-              <Phone 
-                size={18} 
-                style={{ 
-                  position: 'absolute', 
-                  left: '12px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)',
-                  color: 'var(--color-text-muted)'
-                }} 
-              />
-              <input
-                type="tel"
-                name="phone_number"
-                className="form-input"
-                placeholder="(555) 123-4567"
-                value={formData.phone_number}
-                onChange={handlePhoneChange}
-                style={{ paddingLeft: '40px' }}
-              />
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-              For SMS reminders and password reset
-            </p>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">Password</label>
-              <div style={{ position: 'relative' }}>
-                <Lock 
-                  size={18} 
-                  style={{ 
-                    position: 'absolute', 
-                    left: '12px', 
-                    top: '50%', 
-                    transform: 'translateY(-50%)',
-                    color: 'var(--color-text-muted)'
-                  }} 
-                />
-                <input
-                  type="password"
-                  name="password"
-                  className="form-input"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  minLength={8}
-                  style={{ paddingLeft: '40px' }}
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label required">Confirm</label>
-              <input
-                type="password"
-                name="confirmPassword"
-                className="form-input"
-                placeholder="••••••••"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="form-row">
-            <FormSelect
-              label="Role"
-              name="role"
-              value={formData.role}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="First Name"
+              name="first_name"
+              type="text"
+              value={formData.first_name}
               onChange={handleChange}
               required
-              options={[
-                { value: 'student', label: 'Student' },
-                { value: 'instructor', label: 'Instructor' }
-              ]}
+              placeholder="John"
             />
-
-            <div className="form-group">
-              <label className="form-label">Department</label>
-              <div style={{ position: 'relative' }}>
-                <Building 
-                  size={18} 
-                  style={{ 
-                    position: 'absolute', 
-                    left: '12px', 
-                    top: '50%', 
-                    transform: 'translateY(-50%)',
-                    color: 'var(--color-text-muted)'
-                  }} 
-                />
-                <input
-                  type="text"
-                  name="department"
-                  className="form-input"
-                  placeholder="Computer Science"
-                  value={formData.department}
-                  onChange={handleChange}
-                  style={{ paddingLeft: '40px' }}
-                />
-              </div>
-            </div>
+            <Input
+              label="Last Name"
+              name="last_name"
+              type="text"
+              value={formData.last_name}
+              onChange={handleChange}
+              required
+              placeholder="Doe"
+            />
           </div>
 
-          <button 
-            type="submit" 
-            className="btn btn-primary btn-lg"
-            disabled={loading}
-            style={{ width: '100%', marginTop: 'var(--space-md)' }}
-          >
-            {loading ? <Spinner size={20} /> : 'Create Account'}
-          </button>
+          <Input
+            label="Email Address"
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            placeholder="john.doe@university.edu"
+          />
+
+          <Select
+            label="Role"
+            name="role"
+            value={formData.role}
+            onChange={handleChange}
+            options={[
+              { value: 'student', label: 'Student' },
+              { value: 'instructor', label: 'Instructor' }
+            ]}
+          />
+
+          <Input
+            label="Department (Optional)"
+            name="department"
+            type="text"
+            value={formData.department}
+            onChange={handleChange}
+            placeholder="Computer Science"
+          />
+
+          <Input
+            label="Password"
+            name="password"
+            type="password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+            placeholder="At least 8 characters"
+            minLength={8}
+          />
+
+          <Input
+            label="Confirm Password"
+            name="confirmPassword"
+            type="password"
+            value={formData.confirmPassword}
+            onChange={handleChange}
+            required
+            placeholder="Confirm your password"
+            minLength={8}
+          />
+
+          <Button type="submit" fullWidth loading={loading}>
+            Create Account
+          </Button>
         </form>
 
-        <div className="auth-footer">
-          Already have an account?{' '}
-          <Link to="/login">Sign in</Link>
+        <div className="text-center">
+          <span className="text-sm text-gray-600">Already have an account? </span>
+          <Link to="/login" className="text-sm text-indigo-600 hover:text-indigo-500 font-medium">
+            Sign in
+          </Link>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

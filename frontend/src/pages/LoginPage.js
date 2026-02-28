@@ -1,160 +1,114 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { GraduationCap, Mail, Lock, AlertCircle } from 'lucide-react';
-import { Spinner } from '../components/UI';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Button, Input, Card, Alert } from '../components/UI';
+import { authAPI } from '../utils/api';
 
 const LoginPage = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  const { login } = useAuth();
-  const navigate = useNavigate();
+
+  // Check for success message from registration
+  const successMessage = location.state?.message;
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    const result = await login(email, password);
-    
-    if (result.success) {
-      navigate('/dashboard');
-    } else {
-      setError(result.error);
+    try {
+      const response = await authAPI.login(formData.email, formData.password);
+      const { token, user } = response.data;
+      
+      // Store auth data
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      // Redirect based on role
+      if (user.role === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (user.role === 'instructor') {
+        navigate('/instructor/dashboard');
+      } else {
+        navigate('/student/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Invalid email or password');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <div className="auth-header">
-          <div className="auth-logo">
-            <GraduationCap size={32} />
-            <span>Office Hours</span>
-          </div>
-          <p className="auth-subtitle">Sign in to manage your appointments</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <Card className="max-w-md w-full space-y-8 p-8">
+        <div>
+          <h2 className="text-center text-3xl font-extrabold text-gray-900">
+            Welcome Back
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Sign in to Office Hours Platform
+          </p>
         </div>
 
-        {error && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-sm)',
-            padding: 'var(--space-md)',
-            background: 'var(--color-error-bg)',
-            color: 'var(--color-error)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-lg)',
-            fontSize: '0.9375rem'
-          }}>
-            <AlertCircle size={18} />
-            {error}
-          </div>
-        )}
+        {successMessage && <Alert type="success">{successMessage}</Alert>}
+        {error && <Alert type="error">{error}</Alert>}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <div style={{ position: 'relative' }}>
-              <Mail 
-                size={18} 
-                style={{ 
-                  position: 'absolute', 
-                  left: '12px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)',
-                  color: 'var(--color-text-muted)'
-                }} 
-              />
-              <input
-                type="email"
-                className="form-input"
-                placeholder="you@university.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={{ paddingLeft: '40px' }}
-              />
-            </div>
-          </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <Input
+            label="Email Address"
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            placeholder="Enter your email"
+            autoComplete="email"
+          />
 
-          <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label className="form-label">Password</label>
+          <div>
+            <Input
+              label="Password"
+              name="password"
+              type="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              placeholder="Enter your password"
+              autoComplete="current-password"
+            />
+            <div className="mt-2 text-right">
               <Link 
                 to="/forgot-password" 
-                style={{ 
-                  fontSize: '0.875rem', 
-                  color: 'var(--color-primary)',
-                  textDecoration: 'none'
-                }}
+                className="text-sm text-indigo-600 hover:text-indigo-500"
               >
                 Forgot password?
               </Link>
             </div>
-            <div style={{ position: 'relative' }}>
-              <Lock 
-                size={18} 
-                style={{ 
-                  position: 'absolute', 
-                  left: '12px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)',
-                  color: 'var(--color-text-muted)'
-                }} 
-              />
-              <input
-                type="password"
-                className="form-input"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                style={{ paddingLeft: '40px' }}
-              />
-            </div>
           </div>
 
-          <button 
-            type="submit" 
-            className="btn btn-primary btn-lg"
-            disabled={loading}
-            style={{ width: '100%', marginTop: 'var(--space-md)' }}
-          >
-            {loading ? <Spinner size={20} /> : 'Sign In'}
-          </button>
+          <Button type="submit" fullWidth loading={loading}>
+            Sign In
+          </Button>
         </form>
 
-        <div className="auth-footer">
-          Don't have an account?{' '}
-          <Link to="/register">Create one</Link>
+        <div className="text-center">
+          <span className="text-sm text-gray-600">Don't have an account? </span>
+          <Link to="/register" className="text-sm text-indigo-600 hover:text-indigo-500 font-medium">
+            Sign up
+          </Link>
         </div>
-
-        <div className="auth-divider">Demo Accounts</div>
-        
-        <div style={{ 
-          fontSize: '0.8125rem', 
-          color: 'var(--color-text-secondary)',
-          background: 'var(--color-bg)',
-          padding: 'var(--space-md)',
-          borderRadius: 'var(--radius-md)'
-        }}>
-          <div style={{ marginBottom: 'var(--space-sm)' }}>
-            <strong>Student:</strong> student@university.edu / student123
-          </div>
-          <div style={{ marginBottom: 'var(--space-sm)' }}>
-            <strong>Instructor:</strong> prof.smith@university.edu / instructor123
-          </div>
-          <div>
-            <strong>Admin:</strong> admin@university.edu / admin123
-          </div>
-        </div>
-      </div>
+      </Card>
     </div>
   );
 };

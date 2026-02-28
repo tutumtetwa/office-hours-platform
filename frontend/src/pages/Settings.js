@@ -1,305 +1,279 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, Bell, Shield, Save, Check } from 'lucide-react';
-import { PageHeader, Card, Alert, Spinner, FormInput } from '../components/UI';
-import { useAuth } from '../context/AuthContext';
-import api from '../utils/api';
+import { Button, Input, Card, Alert, Select } from '../components/UI';
+import { authAPI } from '../utils/api';
 
 const Settings = () => {
-  const { user, updateUser } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
+
   // Profile form
-  const [profile, setProfile] = useState({
+  const [profileData, setProfileData] = useState({
     first_name: '',
     last_name: '',
-    phone_number: '',
-    department: '',
-    email_notifications: true,
-    sms_notifications: true
+    email: '',
+    department: ''
   });
-  
+
   // Password form
-  const [passwords, setPasswords] = useState({
+  const [passwordData, setPasswordData] = useState({
     current_password: '',
     new_password: '',
     confirm_password: ''
   });
 
+  // Notification preferences
+  const [notifications, setNotifications] = useState({
+    email_booking_confirmation: true,
+    email_booking_reminder: true,
+    email_cancellation: true
+  });
+
   useEffect(() => {
-    if (user) {
-      setProfile({
-        first_name: user.first_name || '',
-        last_name: user.last_name || '',
-        phone_number: formatPhoneDisplay(user.phone_number) || '',
-        department: user.department || '',
-        email_notifications: user.email_notifications !== 0,
-        sms_notifications: user.sms_notifications !== 0
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const response = await authAPI.getMe();
+      const userData = response.data.user;
+      setUser(userData);
+      setProfileData({
+        first_name: userData.first_name || '',
+        last_name: userData.last_name || '',
+        email: userData.email || '',
+        department: userData.department || ''
       });
+      setNotifications({
+        email_booking_confirmation: userData.email_booking_confirmation ?? true,
+        email_booking_reminder: userData.email_booking_reminder ?? true,
+        email_cancellation: userData.email_cancellation ?? true
+      });
+    } catch (err) {
+      setError('Failed to load user data');
+    } finally {
+      setLoading(false);
     }
-  }, [user]);
+  };
 
-  // Format phone for display
-  function formatPhoneDisplay(phone) {
-    if (!phone) return '';
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 10) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
-    }
-    return phone;
-  }
+  const handleProfileChange = (e) => {
+    const { name, value } = e.target;
+    setProfileData(prev => ({ ...prev, [name]: value }));
+  };
 
-  // Handle profile update
-  const handleUpdateProfile = async (e) => {
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target;
+    setPasswordData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleNotificationChange = (e) => {
+    const { name, checked } = e.target;
+    setNotifications(prev => ({ ...prev, [name]: checked }));
+  };
+
+  const handleProfileSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError('');
     setSuccess('');
 
     try {
-      const res = await api.put('/auth/profile', {
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        phone_number: profile.phone_number.replace(/\D/g, ''),
-        department: profile.department,
-        email_notifications: profile.email_notifications ? 1 : 0,
-        sms_notifications: profile.sms_notifications ? 1 : 0
+      await authAPI.updateProfile({
+        ...profileData,
+        ...notifications
       });
-      
-      if (updateUser && res.data.user) {
-        updateUser(res.data.user);
-      }
-      
-      setSuccess('Profile updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to update profile');
+      setSuccess('Profile updated successfully');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update profile');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
-  // Handle password change
-  const handleChangePassword = async (e) => {
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError('');
     setSuccess('');
 
-    if (passwords.new_password !== passwords.confirm_password) {
+    if (passwordData.new_password !== passwordData.confirm_password) {
       setError('New passwords do not match');
       setSaving(false);
       return;
     }
 
-    if (passwords.new_password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (passwordData.new_password.length < 8) {
+      setError('New password must be at least 8 characters');
       setSaving(false);
       return;
     }
 
     try {
-      await api.put('/auth/password', {
-        current_password: passwords.current_password,
-        new_password: passwords.new_password
+      await authAPI.updatePassword(passwordData.current_password, passwordData.new_password);
+      setSuccess('Password changed successfully');
+      setPasswordData({
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
       });
-      
-      setSuccess('Password changed successfully!');
-      setPasswords({ current_password: '', new_password: '', confirm_password: '' });
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to change password');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to change password');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
-  return (
-    <>
-      <PageHeader title="Settings" subtitle="Manage your account preferences" />
-      
-      <div className="page-content">
-        {error && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
-        {success && <Alert type="success" onClose={() => setSuccess('')}>{success}</Alert>}
-
-        <div style={{ display: 'grid', gap: '1.5rem', maxWidth: '800px' }}>
-          {/* Profile Settings */}
-          <Card>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-              <User size={24} color="#1e3a5f" />
-              <h3 style={{ color: '#1e3a5f', margin: 0 }}>Profile Information</h3>
-            </div>
-            
-            <form onSubmit={handleUpdateProfile}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                    First Name
-                  </label>
-                  <input
-                    type="text"
-                    value={profile.first_name}
-                    onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                    Last Name
-                  </label>
-                  <input
-                    type="text"
-                    value={profile.last_name}
-                    onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginTop: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                  <Mail size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={user?.email || ''}
-                  disabled
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd', background: '#f5f5f5', color: '#888' }}
-                />
-                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>Contact admin to change email</p>
-              </div>
-
-              <div style={{ marginTop: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                  <Phone size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={profile.phone_number}
-                  onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
-                  placeholder="(555) 123-4567"
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
-                />
-                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>Used for SMS notifications and password reset</p>
-              </div>
-
-              <div style={{ marginTop: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                  Department
-                </label>
-                <input
-                  type="text"
-                  value={profile.department}
-                  onChange={(e) => setProfile({ ...profile, department: e.target.value })}
-                  placeholder="e.g., Computer Science"
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
-                />
-              </div>
-
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '1.5rem' }} disabled={saving}>
-                {saving ? <Spinner size={18} /> : <><Save size={18} /> Save Changes</>}
-              </button>
-            </form>
-          </Card>
-
-          {/* Notification Preferences */}
-          <Card>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-              <Bell size={24} color="#1e3a5f" />
-              <h3 style={{ color: '#1e3a5f', margin: 0 }}>Notification Preferences</h3>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={profile.email_notifications}
-                  onChange={(e) => setProfile({ ...profile, email_notifications: e.target.checked })}
-                  style={{ width: '20px', height: '20px', accentColor: '#c9a227' }}
-                />
-                <div>
-                  <div style={{ fontWeight: '500', color: '#1e3a5f' }}>Email Notifications</div>
-                  <div style={{ fontSize: '0.85rem', color: '#666' }}>Receive appointment reminders and updates via email</div>
-                </div>
-              </label>
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={profile.sms_notifications}
-                  onChange={(e) => setProfile({ ...profile, sms_notifications: e.target.checked })}
-                  style={{ width: '20px', height: '20px', accentColor: '#c9a227' }}
-                />
-                <div>
-                  <div style={{ fontWeight: '500', color: '#1e3a5f' }}>SMS Notifications</div>
-                  <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                    Receive text message reminders 
-                    {!profile.phone_number && <span style={{ color: '#f57c00' }}> (Add phone number above)</span>}
-                  </div>
-                </div>
-              </label>
-            </div>
-
-            <button onClick={handleUpdateProfile} className="btn btn-primary" style={{ marginTop: '1.5rem' }} disabled={saving}>
-              {saving ? <Spinner size={18} /> : <><Save size={18} /> Save Preferences</>}
-            </button>
-          </Card>
-
-          {/* Change Password */}
-          <Card>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-              <Shield size={24} color="#1e3a5f" />
-              <h3 style={{ color: '#1e3a5f', margin: 0 }}>Change Password</h3>
-            </div>
-
-            <form onSubmit={handleChangePassword}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  value={passwords.current_password}
-                  onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                    New Password
-                  </label>
-                  <input
-                    type="password"
-                    value={passwords.new_password}
-                    onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                    Confirm New Password
-                  </label>
-                  <input
-                    type="password"
-                    value={passwords.confirm_password}
-                    onChange={(e) => setPasswords({ ...passwords, confirm_password: e.target.value })}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
-                  />
-                </div>
-              </div>
-
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '1.5rem' }} disabled={saving}>
-                {saving ? <Spinner size={18} /> : 'Change Password'}
-              </button>
-            </form>
-          </Card>
-        </div>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
-    </>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Settings</h1>
+
+      {error && <Alert type="error" className="mb-6">{error}</Alert>}
+      {success && <Alert type="success" className="mb-6">{success}</Alert>}
+
+      {/* Profile Settings */}
+      <Card className="mb-8 p-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Profile Information</h2>
+        <form onSubmit={handleProfileSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input
+              label="First Name"
+              name="first_name"
+              type="text"
+              value={profileData.first_name}
+              onChange={handleProfileChange}
+              required
+            />
+            <Input
+              label="Last Name"
+              name="last_name"
+              type="text"
+              value={profileData.last_name}
+              onChange={handleProfileChange}
+              required
+            />
+          </div>
+
+          <Input
+            label="Email Address"
+            name="email"
+            type="email"
+            value={profileData.email}
+            onChange={handleProfileChange}
+            required
+            disabled
+            className="bg-gray-100"
+          />
+
+          <Input
+            label="Department"
+            name="department"
+            type="text"
+            value={profileData.department}
+            onChange={handleProfileChange}
+            placeholder="e.g., Computer Science"
+          />
+
+          <Button type="submit" loading={saving}>
+            Save Profile
+          </Button>
+        </form>
+      </Card>
+
+      {/* Notification Preferences */}
+      <Card className="mb-8 p-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Email Notifications</h2>
+        <div className="space-y-4">
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              name="email_booking_confirmation"
+              checked={notifications.email_booking_confirmation}
+              onChange={handleNotificationChange}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            <span className="text-gray-700">Booking confirmations</span>
+          </label>
+
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              name="email_booking_reminder"
+              checked={notifications.email_booking_reminder}
+              onChange={handleNotificationChange}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            <span className="text-gray-700">Appointment reminders (24 hours before)</span>
+          </label>
+
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              name="email_cancellation"
+              checked={notifications.email_cancellation}
+              onChange={handleNotificationChange}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            <span className="text-gray-700">Cancellation notifications</span>
+          </label>
+
+          <div className="pt-4">
+            <Button onClick={handleProfileSubmit} loading={saving}>
+              Save Preferences
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Change Password */}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Change Password</h2>
+        <form onSubmit={handlePasswordSubmit} className="space-y-6">
+          <Input
+            label="Current Password"
+            name="current_password"
+            type="password"
+            value={passwordData.current_password}
+            onChange={handlePasswordChange}
+            required
+          />
+
+          <Input
+            label="New Password"
+            name="new_password"
+            type="password"
+            value={passwordData.new_password}
+            onChange={handlePasswordChange}
+            required
+            minLength={8}
+            placeholder="At least 8 characters"
+          />
+
+          <Input
+            label="Confirm New Password"
+            name="confirm_password"
+            type="password"
+            value={passwordData.confirm_password}
+            onChange={handlePasswordChange}
+            required
+            minLength={8}
+          />
+
+          <Button type="submit" loading={saving}>
+            Change Password
+          </Button>
+        </form>
+      </Card>
+    </div>
   );
 };
 

@@ -1,303 +1,221 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Phone, ArrowLeft, Shield, Key, CheckCircle } from 'lucide-react';
-import { Card, Alert, Spinner } from '../components/UI';
+import { Button, Input, Card, Alert } from '../components/UI';
 import api from '../utils/api';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1); // 1: Enter email, 2: Choose method, 3: Enter code, 4: New password, 5: Success
+  const [step, setStep] = useState(1); // 1: enter email, 2: enter code, 3: new password
   const [email, setEmail] = useState('');
-  const [methods, setMethods] = useState([]);
-  const [tempToken, setTempToken] = useState('');
-  const [resetToken, setResetToken] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState('');
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [tempToken, setTempToken] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [success, setSuccess] = useState('');
+  const [maskedEmail, setMaskedEmail] = useState('');
 
-  // Step 1: Request reset
+  // Step 1: Request password reset
   const handleRequestReset = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     try {
-      const res = await api.post('/password-reset/request', { email });
-      if (res.data.methods && res.data.methods.length > 0) {
-        setMethods(res.data.methods);
-        setTempToken(res.data.temp_token);
-        setStep(2);
+      const response = await api.post('/password-reset/request', { email });
+      const { temp_token, methods } = response.data;
+      
+      if (methods && methods.length > 0) {
+        setTempToken(temp_token);
+        const emailMethod = methods.find(m => m.type === 'email');
+        if (emailMethod) {
+          setMaskedEmail(emailMethod.masked);
+        }
+        // Automatically send the code via email
+        await handleSendCode(temp_token);
       } else {
-        setMessage(res.data.message);
+        setSuccess('If an account exists with this email, you will receive reset instructions.');
       }
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to process request');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to process request');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // Step 2: Send code via selected method
-  const handleSendCode = async (method) => {
+  // Send code via email
+  const handleSendCode = async (token) => {
     setLoading(true);
     setError('');
-    setSelectedMethod(method);
-    
+
     try {
-      const res = await api.post('/password-reset/send-code', { temp_token: tempToken, method });
-      setMessage(res.data.message);
-      setStep(3);
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to send code');
+      const response = await api.post('/password-reset/send-code', {
+        temp_token: token || tempToken,
+        method: 'email'
+      });
+      setSuccess(response.data.message);
+      setStep(2);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send reset code');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // Step 3: Verify code
+  // Step 2: Verify code
   const handleVerifyCode = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     try {
-      const res = await api.post('/password-reset/verify-code', { temp_token: tempToken, code });
-      setResetToken(res.data.reset_token);
-      setStep(4);
-    } catch (e) {
-      setError(e.response?.data?.error || 'Invalid or expired code');
+      const response = await api.post('/password-reset/verify-code', {
+        temp_token: tempToken,
+        code
+      });
+      setResetToken(response.data.reset_token);
+      setSuccess('Code verified! Enter your new password.');
+      setStep(3);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Invalid or expired code');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // Step 4: Reset password
+  // Step 3: Reset password
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
     
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
-      setLoading(false);
       return;
     }
-    
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
-      setLoading(false);
+
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
-    
+
+    setLoading(true);
+    setError('');
+
     try {
-      await api.post('/password-reset/reset', { reset_token: resetToken, new_password: newPassword });
-      setStep(5);
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to reset password');
+      await api.post('/password-reset/reset', {
+        reset_token: resetToken,
+        new_password: newPassword
+      });
+      setSuccess('Password reset successfully! Redirecting to login...');
+      setTimeout(() => navigate('/login'), 2000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to reset password');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  // Resend code
+  const handleResendCode = async () => {
+    await handleSendCode();
   };
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a8a 100%)',
-      padding: '2rem'
-    }}>
-      <Card style={{ maxWidth: '420px', width: '100%', padding: '2rem' }}>
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ 
-            width: '60px', height: '60px', borderRadius: '50%', 
-            background: '#f8f6f3', display: 'flex', alignItems: 'center', 
-            justifyContent: 'center', margin: '0 auto 1rem'
-          }}>
-            {step === 5 ? <CheckCircle size={30} color="#2e7d32" /> : <Key size={30} color="#1e3a5f" />}
-          </div>
-          <h2 style={{ color: '#1e3a5f', marginBottom: '0.5rem' }}>
-            {step === 1 && 'Forgot Password?'}
-            {step === 2 && 'Choose Reset Method'}
-            {step === 3 && 'Enter Code'}
-            {step === 4 && 'Create New Password'}
-            {step === 5 && 'Password Reset!'}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <Card className="max-w-md w-full space-y-8 p-8">
+        <div>
+          <h2 className="text-center text-3xl font-extrabold text-gray-900">
+            Reset Password
           </h2>
-          <p style={{ color: '#666', fontSize: '0.9rem' }}>
-            {step === 1 && "Enter your email and we'll help you reset your password"}
-            {step === 2 && "Select how you'd like to receive your reset code"}
-            {step === 3 && message}
-            {step === 4 && "Enter your new password below"}
-            {step === 5 && "Your password has been reset successfully"}
+          <p className="mt-2 text-center text-sm text-gray-600">
+            {step === 1 && "Enter your email to receive a reset code"}
+            {step === 2 && `Enter the code sent to ${maskedEmail}`}
+            {step === 3 && "Create your new password"}
           </p>
         </div>
 
-        {error && <Alert type="error" style={{ marginBottom: '1rem' }}>{error}</Alert>}
-        {message && step === 1 && <Alert type="success" style={{ marginBottom: '1rem' }}>{message}</Alert>}
+        {error && <Alert type="error">{error}</Alert>}
+        {success && <Alert type="success">{success}</Alert>}
 
         {/* Step 1: Enter Email */}
         {step === 1 && (
-          <form onSubmit={handleRequestReset}>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@university.edu"
-                required
-                style={{ 
-                  width: '100%', padding: '0.75rem', borderRadius: '8px', 
-                  border: '1px solid #ddd', fontSize: '1rem'
-                }}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? <Spinner size={18} /> : 'Continue'}
-            </button>
+          <form onSubmit={handleRequestReset} className="space-y-6">
+            <Input
+              label="Email Address"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="Enter your email"
+            />
+            <Button type="submit" fullWidth loading={loading}>
+              Send Reset Code
+            </Button>
           </form>
         )}
 
-        {/* Step 2: Choose Method */}
+        {/* Step 2: Enter Code */}
         {step === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {methods.map(method => (
+          <form onSubmit={handleVerifyCode} className="space-y-6">
+            <Input
+              label="Verification Code"
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+              placeholder="Enter 6-digit code"
+              maxLength={6}
+              className="text-center text-2xl tracking-widest"
+            />
+            <Button type="submit" fullWidth loading={loading}>
+              Verify Code
+            </Button>
+            <div className="text-center">
               <button
-                key={method.type}
-                onClick={() => handleSendCode(method.type)}
+                type="button"
+                onClick={handleResendCode}
+                className="text-sm text-indigo-600 hover:text-indigo-500"
                 disabled={loading}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '1rem',
-                  padding: '1rem', borderRadius: '8px', border: '2px solid #e0e0e0',
-                  background: 'white', cursor: 'pointer', transition: 'all 0.2s'
-                }}
-                onMouseOver={(e) => e.currentTarget.style.borderColor = '#c9a227'}
-                onMouseOut={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
               >
-                {method.type === 'email' ? (
-                  <Mail size={24} color="#1e3a5f" />
-                ) : (
-                  <Phone size={24} color="#1e3a5f" />
-                )}
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontWeight: '600', color: '#1e3a5f' }}>
-                    {method.type === 'email' ? 'Email' : 'Text Message (SMS)'}
-                  </div>
-                  <div style={{ fontSize: '0.875rem', color: '#666' }}>
-                    Send code to {method.masked}
-                  </div>
-                </div>
+                Didn't receive code? Resend
               </button>
-            ))}
-            {loading && <div style={{ textAlign: 'center' }}><Spinner size={24} /></div>}
-          </div>
+            </div>
+          </form>
         )}
 
-        {/* Step 3: Enter Code */}
+        {/* Step 3: New Password */}
         {step === 3 && (
-          <form onSubmit={handleVerifyCode}>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                6-Digit Code
-              </label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="000000"
-                required
-                maxLength={6}
-                style={{ 
-                  width: '100%', padding: '1rem', borderRadius: '8px', 
-                  border: '1px solid #ddd', fontSize: '1.5rem', textAlign: 'center',
-                  letterSpacing: '0.5rem', fontWeight: '600'
-                }}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading || code.length !== 6}>
-              {loading ? <Spinner size={18} /> : 'Verify Code'}
-            </button>
-            <button 
-              type="button" 
-              onClick={() => setStep(2)} 
-              className="btn btn-ghost" 
-              style={{ width: '100%', marginTop: '0.5rem' }}
-            >
-              Resend Code
-            </button>
+          <form onSubmit={handleResetPassword} className="space-y-6">
+            <Input
+              label="New Password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              placeholder="Enter new password"
+              minLength={8}
+            />
+            <Input
+              label="Confirm Password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              placeholder="Confirm new password"
+              minLength={8}
+            />
+            <Button type="submit" fullWidth loading={loading}>
+              Reset Password
+            </Button>
           </form>
         )}
 
-        {/* Step 4: New Password */}
-        {step === 4 && (
-          <form onSubmit={handleResetPassword}>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                New Password
-              </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-                style={{ 
-                  width: '100%', padding: '0.75rem', borderRadius: '8px', 
-                  border: '1px solid #ddd', fontSize: '1rem'
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{ 
-                  width: '100%', padding: '0.75rem', borderRadius: '8px', 
-                  border: '1px solid #ddd', fontSize: '1rem'
-                }}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? <Spinner size={18} /> : 'Reset Password'}
-            </button>
-          </form>
-        )}
-
-        {/* Step 5: Success */}
-        {step === 5 && (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ 
-              background: '#e8f5e9', borderRadius: '8px', padding: '1rem', 
-              marginBottom: '1rem', color: '#2e7d32'
-            }}>
-              <Shield size={24} style={{ marginBottom: '0.5rem' }} />
-              <p style={{ margin: 0 }}>Your password has been changed successfully.</p>
-            </div>
-            <Link to="/login" className="btn btn-primary" style={{ width: '100%' }}>
-              Sign In
-            </Link>
-          </div>
-        )}
-
-        {/* Back to login */}
-        {step !== 5 && (
-          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-            <Link to="/login" style={{ color: '#2d5a8a', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ArrowLeft size={16} /> Back to Sign In
-            </Link>
-          </div>
-        )}
+        <div className="text-center">
+          <Link to="/login" className="text-sm text-indigo-600 hover:text-indigo-500">
+            ← Back to Login
+          </Link>
+        </div>
       </Card>
     </div>
   );

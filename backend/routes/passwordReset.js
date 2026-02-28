@@ -3,12 +3,63 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../models/database');
 const crypto = require('crypto');
+const { Resend } = require('resend');
 
 const router = express.Router();
+
+// Initialize Resend
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 // Generate 6-digit code
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Mask email for privacy
+function maskEmail(email) {
+  const [local, domain] = email.split('@');
+  const maskedLocal = local.charAt(0) + '***' + local.charAt(local.length - 1);
+  return `${maskedLocal}@${domain}`;
+}
+
+// Send email code via Resend
+async function sendEmailCode(email, firstName, code) {
+  console.log('=== SENDING EMAIL ===');
+  console.log('To:', email);
+  console.log('Code:', code);
+
+  if (!resend) {
+    console.log('[DEV MODE] Email code for', email, ':', code);
+    return true;
+  }
+
+  try {
+    const result = await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'noreply@example.com',
+      to: email,
+      subject: 'Password Reset Code - Office Hours Platform',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #4F46E5;">Password Reset Request</h2>
+          <p>Hi ${firstName || 'there'},</p>
+          <p>You requested to reset your password. Use the code below:</p>
+          <div style="background: #F3F4F6; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
+            <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1F2937;">${code}</span>
+          </div>
+          <p>This code expires in <strong>10 minutes</strong>.</p>
+          <p>If you didn't request this, please ignore this email.</p>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #E5E7EB;">
+          <p style="font-size: 12px; color: #6B7280;">Office Hours Booking Platform</p>
+        </div>
+      `
+    });
+    console.log('Resend response:', result);
+    console.log('=== EMAIL SENT SUCCESSFULLY ===');
+    return true;
+  } catch (error) {
+    console.error('Email error:', error);
+    return false;
+  }
 }
 
 // Request password reset - Step 1
@@ -20,12 +71,14 @@ router.post('/request', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
+    // Find user
     const userResult = await pool.query(
-      'SELECT id, email, phone_number, first_name FROM users WHERE email = $1 AND is_active = 1',
+      'SELECT id, email, first_name FROM users WHERE email = $1 AND is_active = 1',
       [email]
     );
 
     if (userResult.rows.length === 0) {
+      // Don't reveal if user exists or not for security
       return res.json({ 
         message: 'If an account exists with this email, you will receive reset instructions.',
         methods: []
@@ -34,17 +87,16 @@ router.post('/request', async (req, res) => {
 
     const user = userResult.rows[0];
     
-    const methods = [];
-    methods.push({ type: 'email', masked: maskEmail(user.email) });
-    
-    if (user.phone_number && user.phone_number.length >= 10) {
-      methods.push({ type: 'sms', masked: maskPhone(user.phone_number) });
-    }
+    // Only email method available
+    const methods = [{ type: 'email', masked: maskEmail(user.email) }];
 
+    // Generate temporary token for this reset session
     const tempToken = crypto.randomBytes(32).toString('hex');
-    
+
+    // Delete any existing reset requests for this user
     await pool.query('DELETE FROM password_resets WHERE user_id = $1', [user.id]);
-    
+
+    // Create new reset request
     await pool.query(
       `INSERT INTO password_resets (id, user_id, temp_token, expires_at, created_at) 
        VALUES ($1, $2, $3, NOW() + INTERVAL '15 minutes', NOW())`,
@@ -62,7 +114,7 @@ router.post('/request', async (req, res) => {
   }
 });
 
-// Send reset code - Step 2
+// Send code - Step 2
 router.post('/send-code', async (req, res) => {
   try {
     const { temp_token, method } = req.body;
@@ -71,8 +123,14 @@ router.post('/send-code', async (req, res) => {
       return res.status(400).json({ error: 'Token and method are required' });
     }
 
+    // Only email is supported
+    if (method !== 'email') {
+      return res.status(400).json({ error: 'Only email method is supported' });
+    }
+
+    // Find reset request
     const resetResult = await pool.query(
-      `SELECT pr.*, u.email, u.phone_number, u.first_name 
+      `SELECT pr.*, u.email, u.first_name 
        FROM password_resets pr 
        JOIN users u ON pr.user_id = u.id 
        WHERE pr.temp_token = $1 AND pr.expires_at > NOW()`,
@@ -86,44 +144,22 @@ router.post('/send-code', async (req, res) => {
     const reset = resetResult.rows[0];
     const code = generateCode();
 
+    // Update reset request with code
     await pool.query(
       'UPDATE password_resets SET code = $1, code_sent_via = $2, code_sent_at = NOW() WHERE id = $3',
-      [code, method, reset.id]
+      [code, 'email', reset.id]
     );
 
-    if (method === 'email') {
-      console.log('=== SENDING EMAIL ===');
-      console.log('To:', reset.email);
-      console.log('Code:', code);
-      
-      const sent = await sendEmailCode(reset.email, reset.first_name, code);
-      
-      if (sent) {
-        console.log('=== EMAIL SENT SUCCESSFULLY ===');
-        return res.json({ 
-          message: `Reset code sent to ${maskEmail(reset.email)}`,
-          method: 'email'
-        });
-      } else {
-        console.log('=== EMAIL FAILED ===');
-        return res.status(500).json({ error: 'Failed to send email. Please try again.' });
-      }
-    } else if (method === 'sms') {
-      if (!reset.phone_number) {
-        return res.status(400).json({ error: 'No phone number on file' });
-      }
-      
-      const sent = await sendSMSCode(reset.phone_number, code);
-      if (sent) {
-        return res.json({ 
-          message: `Reset code sent to ${maskPhone(reset.phone_number)}`,
-          method: 'sms'
-        });
-      } else {
-        return res.status(500).json({ error: 'Failed to send SMS. Please try email.' });
-      }
+    // Send email
+    const sent = await sendEmailCode(reset.email, reset.first_name, code);
+    
+    if (sent) {
+      return res.json({ 
+        message: `Reset code sent to ${maskEmail(reset.email)}`,
+        method: 'email'
+      });
     } else {
-      return res.status(400).json({ error: 'Invalid method' });
+      return res.status(500).json({ error: 'Failed to send email. Please try again.' });
     }
   } catch (error) {
     console.error('Send code error:', error);
@@ -140,9 +176,13 @@ router.post('/verify-code', async (req, res) => {
       return res.status(400).json({ error: 'Token and code are required' });
     }
 
+    // Find reset request with matching code
     const resetResult = await pool.query(
       `SELECT * FROM password_resets 
-       WHERE temp_token = $1 AND code = $2 AND expires_at > NOW() AND code_sent_at > NOW() - INTERVAL '10 minutes'`,
+       WHERE temp_token = $1 
+       AND code = $2 
+       AND expires_at > NOW() 
+       AND code_sent_at > NOW() - INTERVAL '10 minutes'`,
       [temp_token, code]
     );
 
@@ -150,8 +190,9 @@ router.post('/verify-code', async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired code' });
     }
 
+    // Generate reset token for password change
     const resetToken = crypto.randomBytes(32).toString('hex');
-    
+
     await pool.query(
       'UPDATE password_resets SET verified = true, reset_token = $1 WHERE id = $2',
       [resetToken, resetResult.rows[0].id]
@@ -176,14 +217,18 @@ router.post('/reset', async (req, res) => {
       return res.status(400).json({ error: 'Reset token and new password are required' });
     }
 
-    if (new_password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
+    // Find verified reset request
     const resetResult = await pool.query(
-      `SELECT pr.*, u.email FROM password_resets pr 
-       JOIN users u ON pr.user_id = u.id
-       WHERE pr.reset_token = $1 AND pr.verified = true AND pr.expires_at > NOW()`,
+      `SELECT pr.*, u.id as user_id 
+       FROM password_resets pr 
+       JOIN users u ON pr.user_id = u.id 
+       WHERE pr.reset_token = $1 
+       AND pr.verified = true 
+       AND pr.expires_at > NOW()`,
       [reset_token]
     );
 
@@ -192,173 +237,25 @@ router.post('/reset', async (req, res) => {
     }
 
     const reset = resetResult.rows[0];
-    const hashedPassword = bcrypt.hashSync(new_password, 10);
 
+    // Hash new password
+    const salt = await bcrypt.genSalt(12);
+    const passwordHash = await bcrypt.hash(new_password, salt);
+
+    // Update user password
     await pool.query(
-      'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2',
-      [hashedPassword, reset.user_id]
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [passwordHash, reset.user_id]
     );
 
+    // Delete reset request
     await pool.query('DELETE FROM password_resets WHERE id = $1', [reset.id]);
 
-    await pool.query(
-      'INSERT INTO audit_logs (id, user_id, action, details, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      [uuidv4(), reset.user_id, 'PASSWORD_RESET', JSON.stringify({ method: reset.code_sent_via })]
-    );
-
-    res.json({ message: 'Password reset successfully. You can now log in.' });
+    res.json({ message: 'Password reset successfully' });
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Failed to reset password' });
   }
 });
-
-// Helper functions
-function maskEmail(email) {
-  const [local, domain] = email.split('@');
-  const maskedLocal = local.charAt(0) + '***' + local.charAt(local.length - 1);
-  return `${maskedLocal}@${domain}`;
-}
-
-function maskPhone(phone) {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
-  return '***-***-' + cleaned.slice(-4);
-}
-
-// Email sending function using Resend API (works from cloud environments)
-async function sendEmailCode(email, firstName, code) {
-  // Check for Resend API key first (recommended for cloud)
-  if (process.env.RESEND_API_KEY) {
-    try {
-      console.log('Sending via Resend API...');
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'Office Hours <onboarding@resend.dev>',
-          to: email,
-          subject: 'Password Reset Code - Office Hours',
-          html: getEmailTemplate(firstName, code)
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        console.log('✅ Resend email sent! ID:', data.id);
-        return true;
-      } else {
-        console.error('❌ Resend error:', data);
-        return false;
-      }
-    } catch (error) {
-      console.error('❌ Resend exception:', error.message);
-      return false;
-    }
-  }
-  
-  // Check for SendGrid API key
-  if (process.env.SENDGRID_API_KEY) {
-    try {
-      console.log('Sending via SendGrid API...');
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email }] }],
-          from: { email: process.env.EMAIL_FROM || 'noreply@officehours.app' },
-          subject: 'Password Reset Code - Office Hours',
-          content: [{ type: 'text/html', value: getEmailTemplate(firstName, code) }]
-        })
-      });
-      
-      if (response.ok || response.status === 202) {
-        console.log('✅ SendGrid email sent!');
-        return true;
-      } else {
-        const data = await response.json();
-        console.error('❌ SendGrid error:', data);
-        return false;
-      }
-    } catch (error) {
-      console.error('❌ SendGrid exception:', error.message);
-      return false;
-    }
-  }
-  
-  // Dev mode - no email service configured
-  console.log('========================================');
-  console.log('[DEV MODE] No email service configured');
-  console.log('Set RESEND_API_KEY or SENDGRID_API_KEY');
-  console.log('========================================');
-  console.log('EMAIL CODE:', code);
-  console.log('FOR:', email);
-  console.log('========================================');
-  return true; // Return true in dev mode so testing can continue
-}
-
-// SMS sending function
-async function sendSMSCode(phone, code) {
-  console.log('Sending SMS to:', phone);
-  
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
-    console.log('========================================');
-    console.log('[DEV MODE] No Twilio configured');
-    console.log('========================================');
-    console.log('SMS CODE:', code);
-    console.log('FOR:', phone);
-    console.log('========================================');
-    return true;
-  }
-
-  try {
-    const twilio = require('twilio');
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-
-    let formattedPhone = phone.replace(/\D/g, '');
-    if (!formattedPhone.startsWith('1') && formattedPhone.length === 10) {
-      formattedPhone = '1' + formattedPhone;
-    }
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = '+' + formattedPhone;
-    }
-
-    const message = await client.messages.create({
-      body: `Your Office Hours password reset code is: ${code}. Expires in 10 minutes.`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: formattedPhone
-    });
-    
-    console.log('✅ SMS sent! SID:', message.sid);
-    return true;
-  } catch (error) {
-    console.error('❌ Twilio error:', error.message);
-    return false;
-  }
-}
-
-// Email template
-function getEmailTemplate(firstName, code) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <h1 style="color: #1e3a5f; text-align: center;">📅 Office Hours</h1>
-      <h2 style="color: #1e3a5f;">Password Reset</h2>
-      <p>Hi ${firstName || 'there'},</p>
-      <p>You requested a password reset. Use this code:</p>
-      <div style="background: #f8f6f3; padding: 24px; text-align: center; border-radius: 12px; margin: 24px 0;">
-        <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1e3a5f;">${code}</span>
-      </div>
-      <p style="color: #666;">This code expires in <strong>10 minutes</strong>.</p>
-      <p style="color: #666;">If you didn't request this, ignore this email.</p>
-    </div>
-  `;
-}
 
 module.exports = router;

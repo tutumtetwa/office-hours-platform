@@ -4,83 +4,78 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../models/database');
 const { authenticateToken } = require('../middleware/auth');
+const { logAction } = require('../utils/logger');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-// Helper to get real IP
-function getClientIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-         req.headers['x-real-ip'] || 
-         req.connection?.remoteAddress || 
-         req.ip || 
-         'unknown';
-}
-
-// Helper to log actions
-async function logAction(userId, action, details = {}, req = null) {
-  try {
-    const ip = req ? getClientIP(req) : 'unknown';
-    await pool.query(
-      'INSERT INTO audit_logs (id, user_id, action, details, ip_address, user_agent, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
-      [
-        uuidv4(),
-        userId,
-        action,
-        JSON.stringify(details),
-        ip,
-        req?.headers?.['user-agent']?.substring(0, 200) || 'unknown'
-      ]
-    );
-  } catch (e) {
-    console.error('Failed to log action:', e);
-  }
-}
-
-// Register - now includes phone number
+// Register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, first_name, last_name, phone_number, role = 'student', department } = req.body;
+    const { email, password, first_name, last_name, role = 'student', department } = req.body;
 
+    // Validation
     if (!email || !password || !first_name || !last_name) {
-      return res.status(400).json({ error: 'Email, password, first name, and last name are required' });
+      return res.status(400).json({ error: 'All fields are required' });
     }
 
-    // Validate phone number format if provided
-    if (phone_number) {
-      const cleanedPhone = phone_number.replace(/\D/g, '');
-      if (cleanedPhone.length < 10 || cleanedPhone.length > 15) {
-        return res.status(400).json({ error: 'Invalid phone number format' });
-      }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'Email already registered' });
-    }
-
-    const hashedPassword = bcrypt.hashSync(password, 10);
-    const userId = uuidv4();
-
-    // Clean phone number - store only digits
-    const cleanPhone = phone_number ? phone_number.replace(/\D/g, '') : null;
-
-    await pool.query(
-      'INSERT INTO users (id, email, password, first_name, last_name, phone_number, role, department, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
-      [userId, email, hashedPassword, first_name, last_name, cleanPhone, role, department]
+    // Check if user exists
+    const existingUser = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email.toLowerCase()]
     );
 
-    await logAction(userId, 'USER_REGISTERED', { email, role, has_phone: !!phone_number }, req);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
 
-    const token = jwt.sign({ id: userId, email, role }, JWT_SECRET, { expiresIn: '24h' });
+    // Validate role
+    const validRoles = ['student', 'instructor'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(12);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // Create user (no phone_number field)
+    const result = await pool.query(
+      `INSERT INTO users (id, email, password_hash, first_name, last_name, role, department, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW(), NOW())
+       RETURNING id, email, first_name, last_name, role, department, created_at`,
+      [uuidv4(), email.toLowerCase(), passwordHash, first_name, last_name, role, department || null]
+    );
+
+    const user = result.rows[0];
+
+    // Log registration
+    await logAction(user.id, 'USER_REGISTERED', 'user', user.id, { role }, req.ip);
+
+    // Generate token
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+    );
 
     res.status(201).json({
       message: 'Registration successful',
-      token,
-      user: { id: userId, email, first_name, last_name, phone_number: cleanPhone, role, department }
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role,
+        department: user.department
+      },
+      token
     });
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -91,39 +86,55 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    // Find user
+    const result = await pool.query(
+      'SELECT id, email, password_hash, first_name, last_name, role, department, is_active FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+
+    if (result.rows.length === 0) {
+      await logAction(null, 'LOGIN_FAILED', 'user', null, { email, reason: 'User not found' }, req.ip);
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
     const user = result.rows[0];
 
-    if (!user || !bcrypt.compareSync(password, user.password)) {
-      await logAction(null, 'LOGIN_FAILED', { email, reason: 'Invalid credentials' }, req);
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
     if (!user.is_active) {
-      await logAction(user.id, 'LOGIN_FAILED', { reason: 'Account deactivated' }, req);
-      return res.status(403).json({ error: 'Account is deactivated' });
+      return res.status(401).json({ error: 'Account is deactivated' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
-    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
-    await logAction(user.id, 'LOGIN_SUCCESS', { email: user.email }, req);
+    if (!isValidPassword) {
+      await logAction(user.id, 'LOGIN_FAILED', 'user', user.id, { reason: 'Invalid password' }, req.ip);
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Generate token
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+    );
+
+    // Log success
+    await logAction(user.id, 'LOGIN_SUCCESS', 'user', user.id, {}, req.ip);
 
     res.json({
       message: 'Login successful',
-      token,
       user: {
         id: user.id,
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
-        phone_number: user.phone_number,
         role: user.role,
         department: user.department
-      }
+      },
+      token
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -135,58 +146,60 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, first_name, last_name, phone_number, role, department, sms_notifications, email_notifications FROM users WHERE id = $1',
-      [req.user.id]
+      `SELECT id, email, first_name, last_name, role, department, 
+              email_booking_confirmation, email_booking_reminder, email_cancellation,
+              created_at, updated_at
+       FROM users WHERE id = $1`,
+      [req.user.userId]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     res.json({ user: result.rows[0] });
   } catch (error) {
-    console.error('Get me error:', error);
-    res.status(500).json({ error: 'Failed to get user' });
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user data' });
   }
 });
 
-// Update profile - now includes phone number
+// Update profile
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
-    const { first_name, last_name, phone_number, department, email_notifications, sms_notifications } = req.body;
-    
-    // Clean phone number
-    const cleanPhone = phone_number ? phone_number.replace(/\D/g, '') : null;
-    
-    await pool.query(
+    const { first_name, last_name, department, email_booking_confirmation, email_booking_reminder, email_cancellation } = req.body;
+
+    const result = await pool.query(
       `UPDATE users SET 
-        first_name = COALESCE($1, first_name), 
-        last_name = COALESCE($2, last_name), 
-        phone_number = $3,
-        department = COALESCE($4, department),
-        email_notifications = COALESCE($5, email_notifications),
-        sms_notifications = COALESCE($6, sms_notifications),
-        updated_at = NOW() 
-       WHERE id = $7`,
-      [first_name, last_name, cleanPhone, department, email_notifications, sms_notifications, req.user.id]
+        first_name = COALESCE($1, first_name),
+        last_name = COALESCE($2, last_name),
+        department = COALESCE($3, department),
+        email_booking_confirmation = COALESCE($4, email_booking_confirmation),
+        email_booking_reminder = COALESCE($5, email_booking_reminder),
+        email_cancellation = COALESCE($6, email_cancellation),
+        updated_at = NOW()
+       WHERE id = $7
+       RETURNING id, email, first_name, last_name, role, department`,
+      [first_name, last_name, department, email_booking_confirmation, email_booking_reminder, email_cancellation, req.user.userId]
     );
 
-    await logAction(req.user.id, 'PROFILE_UPDATED', { first_name, last_name, has_phone: !!phone_number }, req);
-    
-    // Return updated user
-    const result = await pool.query(
-      'SELECT id, email, first_name, last_name, phone_number, role, department, email_notifications, sms_notifications FROM users WHERE id = $1',
-      [req.user.id]
-    );
-    
-    res.json({ message: 'Profile updated', user: result.rows[0] });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await logAction(req.user.userId, 'PROFILE_UPDATED', 'user', req.user.userId, {}, req.ip);
+
+    res.json({ 
+      message: 'Profile updated successfully',
+      user: result.rows[0]
+    });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });
 
-// Change password
+// Update password
 router.put('/password', authenticateToken, async (req, res) => {
   try {
     const { current_password, new_password } = req.body;
@@ -195,32 +208,54 @@ router.put('/password', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Current and new password are required' });
     }
 
-    if (new_password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
     }
 
-    const result = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
-    const user = result.rows[0];
+    // Get current password hash
+    const userResult = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [req.user.userId]
+    );
 
-    if (!bcrypt.compareSync(current_password, user.password)) {
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password
+    const isValid = await bcrypt.compare(current_password, userResult.rows[0].password_hash);
+    if (!isValid) {
       return res.status(400).json({ error: 'Current password is incorrect' });
     }
 
-    const hashedPassword = bcrypt.hashSync(new_password, 10);
-    await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, req.user.id]);
+    // Hash new password
+    const salt = await bcrypt.genSalt(12);
+    const newHash = await bcrypt.hash(new_password, salt);
 
-    await logAction(req.user.id, 'PASSWORD_CHANGED', {}, req);
-    res.json({ message: 'Password updated' });
+    // Update password
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [newHash, req.user.userId]
+    );
+
+    await logAction(req.user.userId, 'PASSWORD_CHANGED', 'user', req.user.userId, {}, req.ip);
+
+    res.json({ message: 'Password changed successfully' });
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Failed to change password' });
   }
 });
 
-// Logout
+// Logout (optional - for logging)
 router.post('/logout', authenticateToken, async (req, res) => {
-  await logAction(req.user.id, 'LOGOUT', {}, req);
-  res.json({ message: 'Logged out successfully' });
+  try {
+    await logAction(req.user.userId, 'LOGOUT', 'user', req.user.userId, {}, req.ip);
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
 });
 
 module.exports = router;
