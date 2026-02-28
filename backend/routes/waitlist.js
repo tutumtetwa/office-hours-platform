@@ -31,7 +31,7 @@ router.get('/my-waitlist', authenticateToken, async (req, res) => {
       JOIN users u ON s.instructor_id = u.id
       WHERE w.student_id = $1 AND s.date >= CURRENT_DATE
       ORDER BY s.date, s.start_time
-    `, [req.user.id]);
+    `, [req.user.userId]);
     
     res.json({ waitlist_entries: result.rows });
   } catch (error) {
@@ -78,7 +78,7 @@ router.post('/join', authenticateToken, authorize('student', 'admin'), async (re
     // Check if already on waitlist
     const alreadyOnWaitlist = await pool.query(
       'SELECT id FROM waitlist WHERE slot_id = $1 AND student_id = $2',
-      [slot_id, req.user.id]
+      [slot_id, req.user.userId]
     );
     
     if (alreadyOnWaitlist.rows.length > 0) {
@@ -90,7 +90,7 @@ router.post('/join', authenticateToken, authorize('student', 'admin'), async (re
       SELECT id FROM appointments 
       WHERE student_id = $1 AND date = $2 AND status = 'scheduled'
       AND ((start_time <= $3 AND end_time > $3) OR (start_time < $4 AND end_time >= $4))
-    `, [req.user.id, slot.date, slot.start_time, slot.end_time]);
+    `, [req.user.userId, slot.date, slot.start_time, slot.end_time]);
     
     if (hasConflict.rows.length > 0) {
       return res.status(409).json({ error: 'You have a conflicting appointment at this time' });
@@ -107,7 +107,7 @@ router.post('/join', authenticateToken, authorize('student', 'admin'), async (re
     const waitlistId = uuidv4();
     await pool.query(
       'INSERT INTO waitlist (id, slot_id, student_id, position, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      [waitlistId, slot_id, req.user.id, position]
+      [waitlistId, slot_id, req.user.userId, position]
     );
     
     // Get waitlist count
@@ -135,7 +135,7 @@ router.delete('/leave/:slotId', authenticateToken, async (req, res) => {
     // Get the position of the leaving student
     const leavingResult = await pool.query(
       'SELECT position FROM waitlist WHERE slot_id = $1 AND student_id = $2',
-      [slotId, req.user.id]
+      [slotId, req.user.userId]
     );
     
     if (leavingResult.rows.length === 0) {
@@ -147,7 +147,7 @@ router.delete('/leave/:slotId', authenticateToken, async (req, res) => {
     // Remove from waitlist
     await pool.query(
       'DELETE FROM waitlist WHERE slot_id = $1 AND student_id = $2',
-      [slotId, req.user.id]
+      [slotId, req.user.userId]
     );
     
     // Update positions for everyone after
@@ -183,12 +183,12 @@ router.get('/slot/:slotId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Slot not found' });
     }
     
-    const isInstructor = slotResult.rows[0].instructor_id === req.user.id;
+    const isInstructor = slotResult.rows[0].instructor_id === req.user.userId;
     const isAdmin = req.user.role === 'admin';
     
     // Students can only see their position, not the full list
     if (!isInstructor && !isAdmin) {
-      const myEntry = result.rows.find(r => r.student_id === req.user.id);
+      const myEntry = result.rows.find(r => r.student_id === req.user.userId);
       return res.json({ 
         my_position: myEntry?.position || null,
         total_waiting: result.rows.length

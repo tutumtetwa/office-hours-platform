@@ -57,7 +57,7 @@ router.get('/', authenticateToken, async (req, res) => {
       notes: s.notes,
       instructor_id: s.instructor_id,
       is_booked: s.is_booked,
-      is_my_booking: s.booked_by_student_id === req.user.id,
+      is_my_booking: s.booked_by_student_id === req.user.userId,
       instructor: { 
         id: s.instructor_id, 
         first_name: s.first_name, 
@@ -99,7 +99,7 @@ router.get('/my-slots', authenticateToken, authorize('instructor', 'admin'), asy
       FROM availability_slots s 
       WHERE s.instructor_id = $3 AND s.date >= $1
       ORDER BY s.date, s.start_time
-    `, [currentDate, currentTime, req.user.id]);
+    `, [currentDate, currentTime, req.user.userId]);
     res.json({ slots: result.rows });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch slots' });
@@ -122,7 +122,7 @@ router.post('/', authenticateToken, authorize('instructor', 'admin'), async (req
     
     await pool.query(
       'INSERT INTO availability_slots (id, instructor_id, date, start_time, end_time, location, meeting_type, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
-      [slotId, req.user.id, date, start_time, end_time, location, meeting_type || 'either', notes]
+      [slotId, req.user.userId, date, start_time, end_time, location, meeting_type || 'either', notes]
     );
     
     res.status(201).json({ message: 'Slot created', slot_id: slotId });
@@ -145,7 +145,7 @@ router.post('/bulk', authenticateToken, authorize('instructor', 'admin'), async 
         const slotId = uuidv4();
         await pool.query(
           'INSERT INTO availability_slots (id, instructor_id, date, start_time, end_time, location, meeting_type) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [slotId, req.user.id, slot.date, slot.start_time, slot.end_time, slot.location, slot.meeting_type || 'either']
+          [slotId, req.user.userId, slot.date, slot.start_time, slot.end_time, slot.location, slot.meeting_type || 'either']
         );
         created++;
       }
@@ -171,7 +171,7 @@ router.delete('/:id', authenticateToken, authorize('instructor', 'admin'), async
       return res.status(400).json({ error: 'Cannot delete slot with active appointments' });
     }
     
-    await pool.query('DELETE FROM availability_slots WHERE id = $1 AND instructor_id = $2', [req.params.id, req.user.id]);
+    await pool.query('DELETE FROM availability_slots WHERE id = $1 AND instructor_id = $2', [req.params.id, req.user.userId]);
     res.json({ message: 'Slot deleted' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete slot' });
