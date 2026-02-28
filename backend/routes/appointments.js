@@ -39,7 +39,7 @@ router.get('/my-appointments', authenticateToken, async (req, res) => {
       JOIN users s ON a.student_id = s.id
       WHERE (a.student_id = $1 OR a.instructor_id = $1)
       ORDER BY a.date DESC, a.start_time DESC
-    `, [req.user.id]);
+    `, [req.user.userId]);
     
     const appointments = result.rows.map(a => ({
       id: a.id, 
@@ -56,7 +56,7 @@ router.get('/my-appointments', authenticateToken, async (req, res) => {
       cancellation_reason: a.cancellation_reason,
       instructor: { id: a.instructor_id, first_name: a.instructor_first_name, last_name: a.instructor_last_name, email: a.instructor_email, department: a.instructor_department },
       student: { id: a.student_id, first_name: a.student_first_name, last_name: a.student_last_name, email: a.student_email },
-      is_instructor: a.instructor_id === req.user.id
+      is_instructor: a.instructor_id === req.user.userId
     }));
     
     res.json({ appointments });
@@ -138,7 +138,7 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
       SELECT id FROM appointments 
       WHERE student_id = $1 AND date = $2 AND status = 'scheduled'
       AND ((start_time <= $3 AND end_time > $3) OR (start_time < $4 AND end_time >= $4) OR (start_time >= $3 AND end_time <= $4))
-    `, [req.user.id, slot.date, slot.start_time, slot.end_time]);
+    `, [req.user.userId, slot.date, slot.start_time, slot.end_time]);
     
     if (conflictResult.rows.length > 0) {
       return res.status(409).json({ error: 'You have a conflicting appointment at this time' });
@@ -147,14 +147,14 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
     const appointmentId = uuidv4();
     await pool.query(
       'INSERT INTO appointments (id, slot_id, student_id, instructor_id, date, start_time, end_time, meeting_type, location, topic, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())',
-      [appointmentId, slot_id, req.user.id, slot.instructor_id, slot.date, slot.start_time, slot.end_time, meeting_type, slot.location, topic, notes]
+      [appointmentId, slot_id, req.user.userId, slot.instructor_id, slot.date, slot.start_time, slot.end_time, meeting_type, slot.location, topic, notes]
     );
     
     // Remove student from waitlist if they were on it
-    await pool.query('DELETE FROM waitlist WHERE slot_id = $1 AND student_id = $2', [slot_id, req.user.id]);
+    await pool.query('DELETE FROM waitlist WHERE slot_id = $1 AND student_id = $2', [slot_id, req.user.userId]);
     
     // Get student info for notification
-    const studentResult = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id]);
+    const studentResult = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.userId]);
     const student = studentResult.rows[0];
     
     // Notify instructor
@@ -168,13 +168,13 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
     
     // Notify student (confirmation)
     await createNotification(
-      req.user.id,
+      req.user.userId,
       'booking_confirmed',
       'Booking Confirmed',
       `Your appointment with ${slot.first_name} ${slot.last_name} on ${formattedDate} at ${slot.start_time} has been confirmed.`
     );
     
-    await logAction(req.user.id, 'APPOINTMENT_BOOKED', { appointment_id: appointmentId, instructor_id: slot.instructor_id, date: slot.date }, req);
+    await logAction(req.user.userId, 'APPOINTMENT_BOOKED', { appointment_id: appointmentId, instructor_id: slot.instructor_id, date: slot.date }, req);
     
     res.status(201).json({ message: 'Appointment booked', appointment: { id: appointmentId } });
   } catch (error) {
@@ -206,18 +206,18 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
     const apt = aptResult.rows[0];
     
     // Check permission
-    if (apt.student_id !== req.user.id && apt.instructor_id !== req.user.id && req.user.role !== 'admin') {
+    if (apt.student_id !== req.user.userId && apt.instructor_id !== req.user.userId && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to cancel this appointment' });
     }
     
     // Cancel the appointment
     await pool.query(
       "UPDATE appointments SET status = 'cancelled', cancelled_by = $1, cancellation_reason = $2, cancelled_at = NOW() WHERE id = $3",
-      [req.user.id, reason, req.params.id]
+      [req.user.userId, reason, req.params.id]
     );
     
     const formattedDate = new Date(apt.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const cancelledBy = req.user.id === apt.student_id ? 'student' : 'instructor';
+    const cancelledBy = req.user.userId === apt.student_id ? 'student' : 'instructor';
     
     // Notify the other party
     if (cancelledBy === 'student') {
@@ -246,7 +246,7 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
       console.error('Waitlist notify error:', e);
     }
     
-    await logAction(req.user.id, 'APPOINTMENT_CANCELLED', { appointment_id: req.params.id, reason }, req);
+    await logAction(req.user.userId, 'APPOINTMENT_CANCELLED', { appointment_id: req.params.id, reason }, req);
     
     res.json({ message: 'Appointment cancelled' });
   } catch (error) {
@@ -265,7 +265,7 @@ router.post('/:id/complete', authenticateToken, authorize('instructor', 'admin')
     }
     
     await pool.query('UPDATE appointments SET status = $1, updated_at = NOW() WHERE id = $2', [status, req.params.id]);
-    await logAction(req.user.id, `APPOINTMENT_${status.toUpperCase().replace('-', '_')}`, { appointment_id: req.params.id }, req);
+    await logAction(req.user.userId, `APPOINTMENT_${status.toUpperCase().replace('-', '_')}`, { appointment_id: req.params.id }, req);
     
     res.json({ message: `Appointment marked as ${status}` });
   } catch (error) {
