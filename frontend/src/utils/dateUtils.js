@@ -58,11 +58,19 @@ export const isDateFuture = (date) => {
   return isFuture(dateObj) || isToday(dateObj);
 };
 
-// Check if two dates are the same day
+// Check if two dates are the same day (timezone-safe)
 export const isSameDayAs = (date1, date2) => {
-  const d1 = typeof date1 === 'string' ? parseISO(date1) : date1;
-  const d2 = typeof date2 === 'string' ? parseISO(date2) : date2;
-  return isSameDay(d1, d2);
+  const toLocalDateStr = (d) => {
+    if (typeof d === 'string') {
+      // Date-only "YYYY-MM-DD" — compare directly, no timezone conversion needed
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      // Full ISO string — parse then format in LOCAL time
+      return format(parseISO(d), 'yyyy-MM-dd');
+    }
+    // Date object — format in LOCAL time
+    return format(d, 'yyyy-MM-dd');
+  };
+  return toLocalDateStr(date1) === toLocalDateStr(date2);
 };
 
 // Format date for API (YYYY-MM-DD)

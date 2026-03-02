@@ -1,6 +1,10 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+
+// Return DATE columns as plain "YYYY-MM-DD" strings (not Date objects).
+// By default pg parses DATE via new Date(val) → UTC midnight → timezone shift issues.
+types.setTypeParser(1082, val => val);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
