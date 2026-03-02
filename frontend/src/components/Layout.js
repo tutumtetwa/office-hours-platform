@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { notificationsAPI } from '../utils/api';
 import { 
   Calendar, Clock, Users, Settings, LogOut, LayoutDashboard,
   CalendarPlus, History, FileText, Menu, X, GraduationCap, Repeat, ListOrdered, Bell, Moon, Sun
@@ -25,26 +26,15 @@ const Layout = ({ children }) => {
 
   const fetchNotifications = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const res = await fetch('/api/notifications?limit=20', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data.notifications || []);
-        setUnreadCount(data.unread_count || 0);
-      }
+      const res = await notificationsAPI.getNotifications({ limit: 20 });
+      setNotifications(res.data.notifications || []);
+      setUnreadCount(res.data.unread_count || 0);
     } catch (e) { console.error(e); }
   };
 
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch('/api/notifications/read-all', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await notificationsAPI.markAllAsRead();
       setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
       setUnreadCount(0);
     } catch (e) { console.error(e); }

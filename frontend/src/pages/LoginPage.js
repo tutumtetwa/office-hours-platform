@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Alert, Spinner } from '../components/UI';
-import api from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -13,16 +14,13 @@ const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    try {
-      const res = await api.post('/auth/login', formData);
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify(res.data.user));
+    const result = await login(formData.email, formData.password);
+    if (result.success) {
       navigate('/dashboard');
-    } catch (e) {
-      setError(e.response?.data?.error || 'Login failed');
-    } finally {
-      setLoading(false);
+    } else {
+      setError(result.error);
     }
+    setLoading(false);
   };
 
   return (

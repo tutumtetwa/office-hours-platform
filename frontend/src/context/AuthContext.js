@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authAPI } from '../utils/api';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { authAPI, setAuthToken } from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -13,40 +13,16 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading] = useState(false);
   const [error, setError] = useState(null);
-
-  // Check for existing session on mount
-  useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-      
-      if (token && storedUser) {
-        try {
-          // Verify token is still valid
-          const response = await authAPI.getMe();
-          setUser(response.data.user);
-        } catch (err) {
-          // Token invalid, clear storage
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-        }
-      }
-      setLoading(false);
-    };
-
-    initAuth();
-  }, []);
 
   const login = useCallback(async (email, password) => {
     setError(null);
     try {
       const response = await authAPI.login(email, password);
       const { token, user: userData } = response.data;
-      
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
+
+      setAuthToken(token);
       setUser(userData);
       
       return { success: true };
@@ -75,8 +51,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       // Ignore logout errors
     } finally {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      setAuthToken(null);
       setUser(null);
     }
   }, []);
@@ -86,7 +61,6 @@ export const AuthProvider = ({ children }) => {
       const response = await authAPI.updateProfile(data);
       const updatedUser = response.data.user;
       setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
       return { success: true };
     } catch (err) {
       const message = err.response?.data?.error || 'Update failed';
