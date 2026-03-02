@@ -88,6 +88,11 @@ const Layout = ({ children }) => {
 
   return (
     <div className="app-container">
+      {/* Dark overlay behind sidebar on mobile */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -173,11 +178,7 @@ const Layout = ({ children }) => {
       {notificationsOpen && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setNotificationsOpen(false)} />
-          <div style={{
-            position: 'fixed', top: '10px', left: '220px', width: '360px', 
-            background: darkMode ? '#1f2937' : 'white',
-            borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', zIndex: 999, overflow: 'hidden'
-          }}>
+          <div className="notifications-panel" style={{ background: darkMode ? '#1f2937' : 'white' }}>
             <div style={{ padding: '16px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <strong style={{ color: darkMode ? '#f9fafb' : '#1e3a5f' }}>Notifications</strong>
               {unreadCount > 0 && (
@@ -211,6 +212,37 @@ const Layout = ({ children }) => {
       )}
 
       <main className="main-content">
+        {/* Mobile top bar — only visible on small screens */}
+        <div className="mobile-header">
+          <button
+            className="mobile-menu-btn"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Toggle menu"
+          >
+            {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+          <Link to="/dashboard" className="mobile-brand" style={{ textDecoration: 'none' }}>
+            <GraduationCap size={22} />
+            <span>Office Hours</span>
+          </Link>
+          <div className="mobile-header-actions">
+            <button className="mobile-icon-btn" onClick={toggleDarkMode} aria-label="Toggle dark mode">
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <button
+              className="mobile-icon-btn"
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+              aria-label="Notifications"
+              style={{ position: 'relative' }}
+            >
+              <Bell size={20} />
+              {unreadCount > 0 && (
+                <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+              )}
+            </button>
+          </div>
+        </div>
+
         {children}
         <footer style={{
           marginTop: 'auto',

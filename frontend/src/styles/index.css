@@ -1109,6 +1109,72 @@ a:hover {
 }
 
 /* =====================================================
+   MOBILE NAVIGATION — sidebar overlay + top bar
+   ===================================================== */
+
+/* Full-screen backdrop when sidebar is open on mobile */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 99;
+}
+
+/* Hide overlay on desktop — sidebar is always visible */
+@media (min-width: 769px) {
+  .sidebar-overlay {
+    display: none;
+  }
+}
+
+/* Notifications panel — replaces the old inline-positioned div */
+.notifications-panel {
+  position: fixed;
+  top: 10px;
+  left: 290px;
+  width: 360px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  z-index: 999;
+  overflow: hidden;
+}
+
+/* Mobile top header bar */
+.mobile-header {
+  display: none;
+}
+
+.mobile-menu-btn,
+.mobile-icon-btn {
+  display: none;
+}
+
+.mobile-brand {
+  display: none;
+}
+
+.mobile-header-actions {
+  display: none;
+}
+
+/* Notification count badge (used in mobile header bell) */
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #c9a227;
+  color: #1e3a5f;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =====================================================
    RESPONSIVE DESIGN
    ===================================================== */
 
@@ -1116,40 +1182,195 @@ a:hover {
   .sidebar {
     width: 240px;
   }
-  
+
   .main-content {
     margin-left: 240px;
+  }
+
+  .notifications-panel {
+    left: 250px;
   }
 }
 
 @media (max-width: 768px) {
+  /* Sidebar: slide off-screen, animate back in when .open */
   .sidebar {
     transform: translateX(-100%);
     transition: transform var(--transition-normal);
+    width: 280px;
   }
-  
+
   .sidebar.open {
     transform: translateX(0);
   }
-  
+
+  /* Main content fills full width */
   .main-content {
     margin-left: 0;
   }
-  
-  .page-content {
-    padding: var(--space-lg);
+
+  /* Notifications panel: full-width below mobile header */
+  .notifications-panel {
+    top: 68px;
+    left: 12px;
+    right: 12px;
+    width: auto;
   }
-  
+
+  /* Mobile top bar */
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: 0 var(--space-md);
+    height: 60px;
+    background: var(--color-bg-elevated);
+    border-bottom: 1px solid rgba(30, 58, 95, 0.08);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    flex-shrink: 0;
+  }
+
+  .dark .mobile-header {
+    border-bottom-color: rgba(255, 255, 255, 0.07);
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  .dark .mobile-menu-btn {
+    color: var(--color-text);
+  }
+
+  .mobile-menu-btn:hover {
+    background: var(--color-surface-hover);
+  }
+
+  .mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .dark .mobile-brand {
+    color: var(--color-text);
+  }
+
+  .mobile-brand svg {
+    color: var(--color-accent);
+    flex-shrink: 0;
+  }
+
+  .mobile-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .mobile-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: none;
+    background: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--color-text-secondary);
+  }
+
+  .mobile-icon-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .dark .mobile-icon-btn {
+    color: var(--color-text-secondary);
+  }
+
+  /* Page layout */
+  .page-header {
+    padding: var(--space-md) var(--space-md);
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .page-content {
+    padding: var(--space-md);
+  }
+
   .form-row {
     grid-template-columns: 1fr;
   }
-  
+
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-md);
   }
-  
+
+  /* Typography */
   h1 {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.35rem;
+  }
+
+  /* Better touch targets */
+  .btn {
+    min-height: 44px;
+  }
+
+  /* Cards */
+  .card-body {
+    padding: var(--space-lg);
+  }
+
+  .card-header {
+    padding: var(--space-md) var(--space-lg);
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  /* Slot cards wrap on small screens */
+  .slot-card {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  /* Calendar header wraps */
+  .calendar-header {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  /* Tables: reduce cell padding */
+  .table th,
+  .table td {
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.875rem;
   }
 }
 
