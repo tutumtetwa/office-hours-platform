@@ -1210,6 +1210,7 @@ a:hover {
 }
 
 .dark {
+  /* Legacy variable set */
   --bg-primary: #111827;
   --bg-secondary: #1f2937;
   --bg-card: #1f2937;
@@ -1217,6 +1218,22 @@ a:hover {
   --text-secondary: #9ca3af;
   --border-color: #374151;
   --shadow: 0 1px 3px rgba(0,0,0,0.3);
+
+  /* Remap design-system tokens so ALL components pick up dark values */
+  --color-bg: #111827;
+  --color-bg-alt: #1a2332;
+  --color-bg-elevated: #1f2937;
+  --color-surface: #1f2937;
+  --color-surface-hover: #263244;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-primary: #4d8bcc;
+  --color-primary-light: #5a9cd6;
+  --color-accent: #c9a227;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
 }
 
 .dark body {
@@ -1250,6 +1267,49 @@ a:hover {
 .dark .slot-card, .dark .appointment-card {
   background-color: var(--bg-card);
   border-color: var(--border-color);
+}
+
+.dark .table th {
+  background-color: #1a2332;
+  color: var(--color-text-secondary);
+  border-bottom-color: var(--border-color);
+}
+
+.dark .table td {
+  border-bottom-color: var(--border-color);
+  color: var(--color-text);
+}
+
+.dark .table tr:hover td {
+  background-color: var(--color-surface-hover);
+}
+
+.dark .page-header,
+.dark .page-header h1,
+.dark .page-header p {
+  color: var(--color-text);
+}
+
+.dark .stat-card {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+.dark label {
+  color: var(--color-text);
+}
+
+.dark .modal-overlay .modal {
+  background-color: var(--bg-card);
+}
+
+.dark .dropdown, .dark .dropdown-menu {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+.dark .dropdown-item:hover {
+  background-color: var(--color-surface-hover);
 }
 
 /* Dark mode toggle button */
