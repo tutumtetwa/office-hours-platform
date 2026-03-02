@@ -2,147 +2,20 @@
 
 A full-stack web application for scheduling academic office hours appointments between students and instructors.
 
+🌐 **Live at [officehourscs370.online](https://officehourscs370.online)** — no installation required.
+
 ![Node.js](https://img.shields.io/badge/Node.js-18+-green)
 ![React](https://img.shields.io/badge/React-18-blue)
-![SQLite](https://img.shields.io/badge/SQLite-3-lightgrey)
-
-## Features
-
-### For Students
-- Browse available office hours by instructor and date
-- Book appointments with instructors
-- **Join waitlist** for fully-booked slots (get notified when spot opens!)
-- View and manage upcoming appointments
-- Cancel appointments when needed
-- View appointment history
-- **Download calendar (.ics)** for any appointment
-
-### For Instructors
-- Create and manage individual availability slots
-- **Set up recurring weekly office hours** (auto-generates slots!)
-- **Configure buffer time** between appointments
-- View scheduled appointments
-- Mark appointments as completed or no-show
-- Cancel appointments with reason
-- **Download calendar (.ics)** of all appointments
-
-### For Administrators
-- Manage all users (create, edit, activate/deactivate)
-- View system-wide statistics
-- Access audit logs for all system activity
-
-### Communication & Notifications
-- **Email notifications** for booking confirmations
-- **Email notifications** for cancellations
-- **24-hour reminder emails** before appointments
-- **1-hour reminder emails** before appointments
-- **In-app notification center** with unread badge
-- **Waitlist notifications** when spots open up
-
-### Security Features
-- JWT-based authentication
-- Password hashing with bcrypt
-- Rate limiting on login attempts
-- Session management with auto-expiry
-- Role-based access control
-- Comprehensive audit logging
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue)
+![Deployed](https://img.shields.io/badge/deployed-Railway-blueviolet)
 
 ---
 
-## Prerequisites
+## Try It Now
 
-Before you begin, ensure you have the following installed:
+**[https://officehourscs370.online](https://officehourscs370.online)**
 
-- **Node.js** (version 18 or higher) - [Download](https://nodejs.org/)
-- **npm** (comes with Node.js)
-
-To check if you have them installed:
-```bash
-node --version   # Should show v18.x.x or higher
-npm --version    # Should show 9.x.x or higher
-```
-
----
-
-## Quick Start Guide
-
-### Step 1: Extract/Download the Project
-
-If you downloaded a ZIP file:
-```bash
-unzip office-hours-platform.zip
-cd office-hours-platform
-```
-
-### Step 2: Install Backend Dependencies
-
-```bash
-cd backend
-npm install
-```
-
-This will install:
-- Express.js (web framework)
-- better-sqlite3 (database)
-- bcryptjs (password hashing)
-- jsonwebtoken (JWT auth)
-- And other dependencies...
-
-### Step 3: Start the Backend Server
-
-```bash
-npm start
-```
-
-You should see:
-```
-╔═══════════════════════════════════════════════════════╗
-║     Office Hours Booking Platform - API Server        ║
-╠═══════════════════════════════════════════════════════╣
-║  Server running on http://localhost:3001              ║
-║  Environment: development                             ║
-║  Database: SQLite (local)                             ║
-╚═══════════════════════════════════════════════════════╝
-
-Demo Credentials:
-  Admin:      admin@university.edu / admin123
-  Instructor: prof.smith@university.edu / instructor123
-  Student:    student@university.edu / student123
-```
-
-**Keep this terminal open!** The backend needs to keep running.
-
-### Step 4: Install Frontend Dependencies (New Terminal)
-
-Open a **new terminal window** and navigate to the frontend:
-
-```bash
-cd office-hours-platform/frontend
-npm install
-```
-
-This will install:
-- React 18
-- React Router
-- Axios (HTTP client)
-- date-fns (date utilities)
-- lucide-react (icons)
-
-### Step 5: Start the Frontend Development Server
-
-```bash
-npm start
-```
-
-This will:
-1. Start the React development server
-2. Automatically open your browser to `http://localhost:3000`
-
----
-
-## Demo Credentials
-
-The system comes pre-loaded with demo accounts:
+Use the demo accounts below to explore all roles:
 
 | Role | Email | Password |
 |------|-------|----------|
@@ -151,215 +24,155 @@ The system comes pre-loaded with demo accounts:
 | **Instructor** | prof.johnson@university.edu | instructor123 |
 | **Student** | student@university.edu | student123 |
 
+Or register your own account.
+
+---
+
+## Features
+
+### For Students
+- Browse available office hours by instructor and date
+- Book appointments with real-time availability
+- Join a **waitlist** for fully-booked slots — get notified when a spot opens
+- View and cancel upcoming appointments
+- View full appointment history
+- Download appointments as **.ics calendar files**
+
+### For Instructors
+- Create and manage individual availability slots
+- Set up **recurring weekly office hours** (auto-generates slots)
+- Configure slot duration and buffer time between appointments
+- View scheduled appointments, mark as completed or no-show
+- Cancel appointments with a reason
+- Download full schedule as **.ics**
+
+### For Administrators
+- Provision users with auto-generated temp passwords (welcome email sent)
+- Manage all users: edit, activate/deactivate, permanently delete
+- View system-wide statistics
+- Access full audit logs
+
+### Communication
+- Email confirmations for bookings and cancellations
+- 24-hour and 1-hour reminder emails
+- Waitlist availability notifications
+- In-app notification center with unread badge
+
+### Other
+- Dark mode
+- Email verification on self-registration
+- Forced password reset on first login for admin-provisioned accounts
+- JWT authentication with role-based access control
+- Comprehensive audit logging
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, React Router 6, Axios, date-fns, Lucide React |
+| Backend | Node.js 18+, Express.js 4 |
+| Database | PostgreSQL 15 |
+| Auth | JWT, bcryptjs |
+| Email | Resend |
+| Hosting | Railway (backend + DB), Railway (frontend) |
+
 ---
 
 ## Project Structure
 
 ```
 office-hours-platform/
-├── backend/                    # Express.js API server
-│   ├── models/
-│   │   └── database.js         # SQLite database setup
+├── backend/
+│   ├── models/database.js        # PostgreSQL setup & migrations
 │   ├── routes/
-│   │   ├── auth.js             # Authentication endpoints
-│   │   ├── slots.js            # Availability management
-│   │   ├── appointments.js     # Booking endpoints
-│   │   └── admin.js            # Admin endpoints
-│   ├── middleware/
-│   │   └── auth.js             # JWT authentication
-│   ├── utils/
-│   │   ├── logger.js           # Audit logging
-│   │   └── validators.js       # Input validation
-│   ├── server.js               # Main server file
-│   ├── package.json
-│   └── database.sqlite         # SQLite database (auto-created)
+│   │   ├── auth.js               # Auth, email verification, password reset
+│   │   ├── slots.js              # Availability slot management
+│   │   ├── appointments.js       # Booking, cancel, complete
+│   │   ├── recurring.js          # Recurring patterns & slot generation
+│   │   ├── waitlist.js           # Waitlist management
+│   │   ├── admin.js              # Admin user management
+│   │   └── notifications.js      # In-app notifications
+│   ├── middleware/auth.js         # JWT middleware
+│   └── server.js
 │
-├── frontend/                   # React application
-│   ├── public/
-│   │   └── index.html
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Layout.js       # Main layout with sidebar
-│   │   │   └── UI.js           # Reusable UI components
-│   │   ├── context/
-│   │   │   └── AuthContext.js  # Authentication state
-│   │   ├── hooks/
-│   │   │   └── useData.js      # Data fetching hooks
-│   │   ├── pages/
-│   │   │   ├── LoginPage.js
-│   │   │   ├── RegisterPage.js
-│   │   │   ├── Dashboard.js
-│   │   │   ├── BookAppointment.js
-│   │   │   ├── MyAppointments.js
-│   │   │   ├── AvailabilityManagement.js
-│   │   │   ├── History.js
-│   │   │   ├── Settings.js
-│   │   │   ├── AdminUsers.js
-│   │   │   └── AdminLogs.js
-│   │   ├── utils/
-│   │   │   ├── api.js          # API client
-│   │   │   └── dateUtils.js    # Date formatting
-│   │   ├── styles/
-│   │   │   └── index.css       # All styles
-│   │   ├── App.js              # Main app with routing
-│   │   └── index.js            # Entry point
-│   └── package.json
-│
-└── README.md
+└── frontend/
+    └── src/
+        ├── components/
+        │   ├── Layout.js          # Sidebar + notifications
+        │   └── UI.js              # Shared UI components
+        ├── context/
+        │   ├── AuthContext.js
+        │   └── ThemeContext.js
+        ├── pages/
+        │   ├── LoginPage.js
+        │   ├── RegisterPage.js
+        │   ├── VerifyEmailPage.js
+        │   ├── SetupPasswordPage.js
+        │   ├── Dashboard.js
+        │   ├── BookAppointment.js
+        │   ├── MyAppointments.js
+        │   ├── AvailabilityManagement.js
+        │   ├── RecurringAvailability.js
+        │   ├── Waitlist.js
+        │   ├── History.js
+        │   ├── Settings.js
+        │   ├── AdminUsers.js
+        │   └── AdminLogs.js
+        └── utils/
+            ├── api.js
+            └── dateUtils.js
 ```
 
 ---
 
-## API Endpoints
+## Local Development
 
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/logout` | Logout |
-| GET | `/api/auth/me` | Get current user |
-| PUT | `/api/auth/profile` | Update profile |
-| PUT | `/api/auth/password` | Change password |
+Only needed if you want to run a local copy for development.
 
-### Availability Slots
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/slots` | Get available slots |
-| GET | `/api/slots/instructors` | List all instructors |
-| GET | `/api/slots/my-slots` | Get instructor's own slots |
-| POST | `/api/slots` | Create availability slot |
-| POST | `/api/slots/bulk` | Create multiple slots |
-| PUT | `/api/slots/:id` | Update slot |
-| DELETE | `/api/slots/:id` | Delete slot |
+### Prerequisites
+- Node.js 18+
+- PostgreSQL 15+
 
-### Appointments
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/appointments/my-appointments` | Get user's appointments |
-| GET | `/api/appointments/:id` | Get appointment details |
-| POST | `/api/appointments/book` | Book an appointment |
-| POST | `/api/appointments/:id/cancel` | Cancel appointment |
-| PUT | `/api/appointments/:id` | Update appointment |
-| POST | `/api/appointments/:id/complete` | Mark as complete/no-show |
+### Setup
 
-### Admin
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/users` | List all users |
-| GET | `/api/admin/users/:id` | Get user details |
-| POST | `/api/admin/users` | Create user |
-| PUT | `/api/admin/users/:id` | Update user |
-| POST | `/api/admin/users/:id/deactivate` | Deactivate user |
-| POST | `/api/admin/users/:id/reactivate` | Reactivate user |
-| GET | `/api/admin/audit-logs` | Get audit logs |
-| GET | `/api/admin/stats` | Get system statistics |
+```bash
+# Clone the repo
+git clone https://github.com/tutumtetwa/office-hours-platform.git
+cd office-hours-platform
 
----
+# Backend
+cd backend
+npm install
+cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, RESEND_API_KEY
+npm start
 
-## Configuration
+# Frontend (new terminal)
+cd frontend
+npm install
+npm start
+```
 
-### Backend Environment Variables
+### Environment Variables
 
-Create a `.env` file in the `backend/` directory:
-
+**Backend `.env`**
 ```env
 PORT=3001
-JWT_SECRET=your-super-secret-key-change-in-production
-NODE_ENV=development
-CORS_ORIGIN=http://localhost:3000
+DATABASE_URL=postgresql://user:pass@localhost:5432/officehours
+JWT_SECRET=your-secret-key
+RESEND_API_KEY=re_xxxx
+EMAIL_FROM=noreply@yourdomain.com
+APP_URL=http://localhost:3000
 ```
 
-### Frontend Environment Variables
-
-Create a `.env` file in the `frontend/` directory:
-
+**Frontend `.env`**
 ```env
 REACT_APP_API_URL=http://localhost:3001/api
 ```
 
 ---
 
-## Troubleshooting
+## Built by
 
-### "Cannot find module" errors
-```bash
-# Delete node_modules and reinstall
-rm -rf node_modules
-npm install
-```
-
-### Port already in use
-```bash
-# Find and kill process on port 3001
-lsof -i :3001
-kill -9 <PID>
-
-# Or use a different port
-PORT=3002 npm start
-```
-
-### Database issues
-```bash
-# Delete and recreate database
-rm backend/database.sqlite
-npm start  # Will recreate with demo data
-```
-
-### CORS errors
-Make sure the backend is running on port 3001 and frontend on port 3000, or update the CORS configuration in `backend/server.js`.
-
----
-
-## Building for Production
-
-### Frontend Build
-```bash
-cd frontend
-npm run build
-```
-
-This creates an optimized build in `frontend/build/`.
-
-### Serving in Production
-
-1. Build the frontend
-2. Serve the `build/` folder with a static file server
-3. Run the backend with `NODE_ENV=production`
-
-Example with Express serving static files:
-```javascript
-// Add to server.js for production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
-  });
-}
-```
-
----
-
-## Technology Stack
-
-### Backend
-- **Runtime**: Node.js 18+
-- **Framework**: Express.js 4.x
-- **Database**: SQLite with better-sqlite3
-- **Authentication**: JWT (jsonwebtoken)
-- **Security**: bcryptjs, helmet, express-rate-limit
-- **Validation**: express-validator
-
-### Frontend
-- **Framework**: React 18
-- **Routing**: React Router 6
-- **HTTP Client**: Axios
-- **Icons**: Lucide React
-- **Date Handling**: date-fns
-- **Styling**: Custom CSS (no framework)
-
----
-
-## License
-
-MIT License - feel free to use this for educational purposes.
+[Tutu](https://tutumtetwa.com) & Dennis

@@ -212,6 +212,35 @@ const Layout = ({ children }) => {
 
       <main className="main-content">
         {children}
+        <footer style={{
+          marginTop: 'auto',
+          padding: 'var(--space-lg) var(--space-xl)',
+          textAlign: 'center',
+          fontSize: '0.8rem',
+          color: 'var(--color-text-muted)',
+          borderTop: '1px solid var(--border-color)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '0.4rem'
+        }}>
+          <span>Office Hours</span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>
+            Built by{' '}
+            <a
+              href="https://tutumtetwa.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--color-accent)', textDecoration: 'none', fontWeight: 600 }}
+            >
+              Tutu
+            </a>
+            {' '}& Dennis
+          </span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>{new Date().getFullYear()}</span>
+        </footer>
       </main>
     </div>
   );
