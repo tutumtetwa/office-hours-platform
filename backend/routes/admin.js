@@ -27,14 +27,42 @@ async function logAction(userId, action, details = {}, req = null) {
   }
 }
 
-// Get all users
+// Get all users (with optional pagination and search)
 router.get('/users', authenticateToken, authorize('admin'), async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, email, first_name, last_name, role, department, is_active, created_at, last_login FROM users ORDER BY created_at DESC'
+    const { page = 1, limit = 20, search = '' } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const params = [];
+    let whereClause = '';
+
+    if (search) {
+      params.push(`%${search}%`);
+      whereClause = `WHERE (email ILIKE $1 OR first_name ILIKE $1 OR last_name ILIKE $1 OR department ILIKE $1)`;
+    }
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int as total FROM users ${whereClause}`,
+      params
     );
-    await logAction(req.user.id, 'VIEW_USERS', {}, req);
-    res.json({ users: result.rows });
+    const total = countResult.rows[0].total;
+
+    params.push(parseInt(limit));
+    params.push(offset);
+    const result = await pool.query(
+      `SELECT id, email, first_name, last_name, role, department, is_active, must_change_password, created_at, last_login
+       FROM users ${whereClause} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    res.json({
+      users: result.rows,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
@@ -90,6 +118,44 @@ router.post('/users', authenticateToken, authorize('admin'), async (req, res) =>
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Resend invite (for admin-created users who haven't set their password)
+router.post('/users/:id/resend-invite', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const userResult = await pool.query(
+      'SELECT id, email, first_name, must_change_password FROM users WHERE id = $1',
+      [req.params.id]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const user = userResult.rows[0];
+    if (!user.must_change_password) {
+      return res.status(400).json({ error: 'This user has already set up their account' });
+    }
+
+    // Generate fresh temp password and setup token
+    const tempPassword = generateTempPassword();
+    const hashedPassword = bcrypt.hashSync(tempPassword, 10);
+    const setupToken = crypto.randomBytes(32).toString('hex');
+
+    await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, user.id]);
+    await pool.query('DELETE FROM password_resets WHERE user_id = $1', [user.id]);
+    await pool.query(
+      `INSERT INTO password_resets (id, user_id, temp_token, reset_token, expires_at, created_at)
+       VALUES ($1, $2, 'setup', $3, NOW() + INTERVAL '7 days', NOW())`,
+      [uuidv4(), user.id, setupToken]
+    );
+
+    await sendWelcomeEmail(user.email, user.first_name, tempPassword);
+    await logAction(req.user.id, 'USER_INVITE_RESENT', { target_user_id: user.id }, req);
+
+    res.json({ message: 'Invite resent successfully', temp_password: tempPassword });
+  } catch (error) {
+    console.error('Resend invite error:', error);
+    res.status(500).json({ error: 'Failed to resend invite' });
   }
 });
 

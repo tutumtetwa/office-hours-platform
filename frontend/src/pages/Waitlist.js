@@ -44,10 +44,10 @@ const Waitlist = () => {
       <div className="page-content">
         {success && <Alert type="success" onClose={() => setSuccess('')}>{success}</Alert>}
         {error && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
-        
+
         {entries.length === 0 ? (
           <Card>
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>
+            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
               <Users size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
               <h3>No waitlist entries</h3>
               <p>When a slot you want is booked, click "Join Waitlist" to be notified when it opens up.</p>
@@ -60,38 +60,38 @@ const Waitlist = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                      <div style={{ background: '#fff3e0', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Bell size={16} color="#f57c00" />
-                        <span style={{ fontWeight: '600', color: '#e65100' }}>Position #{entry.position}</span>
+                      <div style={{ background: 'var(--color-warning-bg)', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Bell size={16} color="var(--color-warning)" />
+                        <span style={{ fontWeight: '600', color: 'var(--color-warning)' }}>Position #{entry.position}</span>
                       </div>
                     </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#1e3a5f' }}>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: 'var(--color-text)' }}>
                       <Calendar size={18} />
                       <strong>{formatDate(entry.date)}</strong>
                     </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#666' }}>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
                       <Clock size={18} />
                       <span>{formatTime(entry.start_time)} - {formatTime(entry.end_time)}</span>
                     </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#666' }}>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
                       <User size={18} />
                       <span>{entry.instructor_first_name} {entry.instructor_last_name}</span>
-                      {entry.instructor_department && <span style={{ color: '#999' }}>• {entry.instructor_department}</span>}
+                      {entry.instructor_department && <span style={{ color: 'var(--color-text-muted)' }}>• {entry.instructor_department}</span>}
                     </div>
-                    
+
                     {entry.location && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#888' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-muted)' }}>
                         <MapPin size={18} />
                         <span>{entry.location}</span>
                       </div>
                     )}
                   </div>
-                  
-                  <button onClick={() => leaveWaitlist(entry.slot_id)} className="btn btn-ghost" 
-                    style={{ color: '#c62828', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+
+                  <button onClick={() => leaveWaitlist(entry.slot_id)} className="btn btn-ghost"
+                    style={{ color: 'var(--color-error)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <X size={18} /> Leave Waitlist
                   </button>
                 </div>

@@ -131,6 +131,7 @@ export const useAdminStats = () => {
 // Hook for admin users
 export const useUsers = (params = {}) => {
   const [users, setUsers] = useState([]);
+  const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -139,6 +140,7 @@ export const useUsers = (params = {}) => {
     try {
       const response = await adminAPI.getUsers(params);
       setUsers(response.data.users);
+      setPagination(response.data.pagination || null);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to fetch users');
     } finally {
@@ -150,7 +152,7 @@ export const useUsers = (params = {}) => {
     fetchUsers();
   }, [fetchUsers]);
 
-  return { users, loading, error, refetch: fetchUsers };
+  return { users, pagination, loading, error, refetch: fetchUsers };
 };
 
 // Hook for audit logs

@@ -99,6 +99,7 @@ export const adminAPI = {
   updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
   deactivateUser: (id) => api.post(`/admin/users/${id}/deactivate`),
   reactivateUser: (id) => api.post(`/admin/users/${id}/reactivate`),
+  resendInvite: (id) => api.post(`/admin/users/${id}/resend-invite`),
   getAuditLogs: (params) => api.get('/admin/audit-logs', { params }),
   getStats: () => api.get('/admin/stats'),
   getDepartments: () => api.get('/admin/departments')

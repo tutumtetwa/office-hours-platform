@@ -51,6 +51,49 @@ async function sendVerificationEmail(email, firstName, code) {
   }
 }
 
+async function sendVerifiedWelcomeEmail(email, firstName) {
+  if (!resend) {
+    console.log(`[DEV MODE] Post-verification welcome email for ${email}`);
+    return true;
+  }
+  try {
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'noreply@example.com',
+      to: email,
+      subject: 'Welcome to Office Hours Booking Platform!',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #1e3a5f, #2d5a8a); color: white; padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 10px;">🎓</div>
+            <h1 style="margin: 0; font-size: 24px;">You're All Set, ${firstName}!</h1>
+          </div>
+          <div style="background: #f8f6f3; padding: 30px; border-radius: 0 0 12px 12px;">
+            <p style="font-size: 16px; color: #1e3a5f;">Your email has been verified and your account is now active.</p>
+            <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #c9a227;">
+              <h3 style="margin: 0 0 12px; color: #1e3a5f;">Getting Started</h3>
+              <ul style="margin: 0; padding-left: 20px; color: #555; line-height: 1.8;">
+                <li><strong>Browse</strong> available office hours by instructor</li>
+                <li><strong>Book</strong> a time slot that works for you</li>
+                <li><strong>Get notified</strong> via email about your appointments</li>
+                <li><strong>Join waitlists</strong> for fully-booked slots</li>
+              </ul>
+            </div>
+            <p style="color: #555;">If you have any issues, contact us at <a href="mailto:admin@officehourscs370.online" style="color: #2d5a8a;">admin@officehourscs370.online</a>.</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${APP_URL}/dashboard" style="background: #c9a227; color: #1e3a5f; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold;">Go to Dashboard</a>
+            </div>
+            <p style="color: #888; font-size: 12px; text-align: center;">Office Hours Booking Platform — CS 370</p>
+          </div>
+        </div>
+      `
+    });
+    return true;
+  } catch (error) {
+    console.error('Post-verification welcome email error:', error);
+    return false;
+  }
+}
+
 async function sendWelcomeEmail(email, firstName, tempPassword) {
   if (!resend) {
     console.log(`[DEV MODE] Welcome email for ${email}, temp password: ${tempPassword}`);
@@ -182,6 +225,9 @@ router.post('/verify-email', async (req, res) => {
     await pool.query('DELETE FROM email_verifications WHERE user_id = $1', [row.user_id]);
 
     await logAction(row.user_id, 'EMAIL_VERIFIED', 'user', row.user_id, {}, req.ip);
+
+    // Send welcome email (non-blocking — don't fail verification if email fails)
+    sendVerifiedWelcomeEmail(row.email, row.first_name).catch(() => {});
 
     const token = jwt.sign(
       { userId: row.user_id, email: row.email, role: row.role },

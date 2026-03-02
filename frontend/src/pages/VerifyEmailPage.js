@@ -12,7 +12,12 @@ const VerifyEmailPage = () => {
   const { verifyEmail } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
 
-  const verificationToken = location.state?.verification_token;
+  // Persist token in sessionStorage so page refresh doesn't lose it
+  const tokenFromState = location.state?.verification_token;
+  useEffect(() => {
+    if (tokenFromState) sessionStorage.setItem('verification_token', tokenFromState);
+  }, [tokenFromState]);
+  const verificationToken = tokenFromState || sessionStorage.getItem('verification_token');
 
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -84,6 +89,7 @@ const VerifyEmailPage = () => {
     setError('');
     const result = await verifyEmail(verificationToken, codeStr);
     if (result.success) {
+      sessionStorage.removeItem('verification_token');
       navigate('/dashboard');
     } else {
       setError(result.error);

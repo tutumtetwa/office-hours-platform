@@ -103,7 +103,7 @@ const BookAppointment = () => {
   return (
     <>
       <PageHeader title="Book Appointment" subtitle="Find and book available office hours" />
-      
+
       <div className="page-content">
         {success && <Alert type="success" onClose={() => setSuccess('')}>{success}</Alert>}
         {error && !bookingSlot && !waitlistSlot && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
@@ -111,9 +111,9 @@ const BookAppointment = () => {
         <Card style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div style={{ flex: '1', minWidth: '200px' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#1e3a5f' }}>Filter by Instructor</label>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: 'var(--color-text)' }}>Filter by Instructor</label>
               <select value={selectedInstructor} onChange={(e) => setSelectedInstructor(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem' }}>
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '1rem', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
                 <option value="">All Instructors</option>
                 {instructors.map(inst => (
                   <option key={inst.id} value={inst.id}>{inst.first_name} {inst.last_name} - {inst.department}</option>
@@ -126,22 +126,22 @@ const BookAppointment = () => {
         {/* Legend */}
         <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#fffef5', border: '2px solid #c9a227' }}></div>
-            <span>Available</span>
+            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: 'var(--color-warning-bg)', border: '2px solid var(--color-accent)' }}></div>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Available</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#f5f5f5', border: '1px solid #ccc' }}></div>
-            <span>Booked (Join Waitlist)</span>
+            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: 'var(--color-surface-hover)', border: '1px solid var(--border-color)' }}></div>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Booked (Join Waitlist)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#e8f5e9', border: '2px solid #2e7d32' }}></div>
-            <span>Your Booking</span>
+            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: 'var(--color-success-bg)', border: '2px solid var(--color-success)' }}></div>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Your Booking</span>
           </div>
         </div>
 
         {sortedDates.length === 0 ? (
           <Card>
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>
+            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
               <Calendar size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
               <h3>No available slots</h3>
               <p>Check back later or select a different instructor.</p>
@@ -151,25 +151,25 @@ const BookAppointment = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {sortedDates.map(date => (
               <Card key={date}>
-                <h3 style={{ marginBottom: '1rem', color: '#1e3a5f', borderBottom: '2px solid #c9a227', paddingBottom: '0.5rem' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--color-text)', borderBottom: '2px solid var(--color-accent)', paddingBottom: '0.5rem' }}>
                   {formatDate(date)}
                 </h3>
-                
+
                 {getInstructorSlots(groupedSlots[date]).map(({ instructor, slots: instSlots }) => (
                   <div key={instructor.id} style={{ marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                      <User size={18} color="#2d5a8a" />
-                      <span style={{ fontWeight: '600', color: '#1e3a5f' }}>{instructor.first_name} {instructor.last_name}</span>
-                      <span style={{ color: '#888', fontSize: '0.875rem' }}>{instructor.department}</span>
+                      <User size={18} color="var(--color-primary)" />
+                      <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>{instructor.first_name} {instructor.last_name}</span>
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{instructor.department}</span>
                     </div>
-                    
+
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                       {instSlots.map(slot => (
                         <div key={slot.id}
                           style={{
                             padding: '0.75rem 1rem', borderRadius: '8px', minWidth: '150px', textAlign: 'center',
-                            border: slot.is_my_booking ? '2px solid #2e7d32' : slot.is_booked ? '1px solid #e0e0e0' : '2px solid #c9a227',
-                            background: slot.is_my_booking ? '#e8f5e9' : slot.is_booked ? '#f9f9f9' : '#fffef5',
+                            border: slot.is_my_booking ? '2px solid var(--color-success)' : slot.is_booked ? '1px solid var(--border-color)' : '2px solid var(--color-accent)',
+                            background: slot.is_my_booking ? 'var(--color-success-bg)' : slot.is_booked ? 'var(--color-surface-hover)' : 'var(--color-warning-bg)',
                             cursor: slot.is_my_booking ? 'default' : 'pointer',
                             transition: 'all 0.2s',
                           }}
@@ -181,21 +181,21 @@ const BookAppointment = () => {
                           onMouseOver={(e) => !slot.is_my_booking && (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)')}
                           onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)', e.currentTarget.style.boxShadow = 'none')}
                         >
-                          <div style={{ fontWeight: '600', color: slot.is_booked && !slot.is_my_booking ? '#888' : '#1e3a5f', textDecoration: slot.is_booked && !slot.is_my_booking ? 'line-through' : 'none' }}>
+                          <div style={{ fontWeight: '600', color: slot.is_booked && !slot.is_my_booking ? 'var(--color-text-muted)' : 'var(--color-text)', textDecoration: slot.is_booked && !slot.is_my_booking ? 'line-through' : 'none' }}>
                             {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                           </div>
-                          
+
                           {slot.location && (
-                            <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
                               <MapPin size={12} /> {slot.location}
                             </div>
                           )}
-                          
+
                           <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem',
-                            color: slot.is_my_booking ? '#2e7d32' : slot.is_booked ? '#f57c00' : '#c9a227'
+                            color: slot.is_my_booking ? 'var(--color-success)' : slot.is_booked ? 'var(--color-warning)' : 'var(--color-accent)'
                           }}>
-                            {slot.is_my_booking ? <><Check size={12} /> Your Booking</> : 
-                             slot.is_booked ? <><Users size={12} /> Join Waitlist</> : 
+                            {slot.is_my_booking ? <><Check size={12} /> Your Booking</> :
+                             slot.is_booked ? <><Users size={12} /> Join Waitlist</> :
                              'Book Now'}
                           </div>
                         </div>
@@ -217,11 +217,11 @@ const BookAppointment = () => {
         </>}>
         {error && <Alert type="error">{error}</Alert>}
         {bookingSlot && (
-          <div style={{ background: '#f8f6f3', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Calendar size={18} color="#1e3a5f" /><strong>{formatDate(bookingSlot.date)}</strong></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Clock size={18} color="#1e3a5f" /><span>{formatTime(bookingSlot.start_time)} - {formatTime(bookingSlot.end_time)}</span></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><User size={18} color="#1e3a5f" /><span>{bookingSlot.instructor?.first_name} {bookingSlot.instructor?.last_name}</span></div>
-            {bookingSlot.location && <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}><MapPin size={18} color="#1e3a5f" /><span>{bookingSlot.location}</span></div>}
+          <div style={{ background: 'var(--color-surface-hover)', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Calendar size={18} color="var(--color-primary)" /><strong style={{ color: 'var(--color-text)' }}>{formatDate(bookingSlot.date)}</strong></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Clock size={18} color="var(--color-primary)" /><span style={{ color: 'var(--color-text)' }}>{formatTime(bookingSlot.start_time)} - {formatTime(bookingSlot.end_time)}</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><User size={18} color="var(--color-primary)" /><span style={{ color: 'var(--color-text)' }}>{bookingSlot.instructor?.first_name} {bookingSlot.instructor?.last_name}</span></div>
+            {bookingSlot.location && <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}><MapPin size={18} color="var(--color-primary)" /><span style={{ color: 'var(--color-text)' }}>{bookingSlot.location}</span></div>}
           </div>
         )}
         <FormSelect label="Meeting Type" value={bookingData.meeting_type} onChange={(e) => setBookingData({ ...bookingData, meeting_type: e.target.value })}
@@ -234,25 +234,25 @@ const BookAppointment = () => {
       <Modal isOpen={!!waitlistSlot} onClose={() => { setWaitlistSlot(null); setError(''); }} title="Join Waitlist"
         footer={<>
           <button className="btn btn-secondary" onClick={() => { setWaitlistSlot(null); setError(''); }}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleJoinWaitlist} disabled={submitting} style={{ background: '#f57c00' }}>
+          <button className="btn btn-primary" onClick={handleJoinWaitlist} disabled={submitting} style={{ background: 'var(--color-warning)' }}>
             {submitting ? <Spinner size={18} /> : <><Bell size={16} style={{ marginRight: '0.5rem' }} /> Join Waitlist</>}
           </button>
         </>}>
         {error && <Alert type="error">{error}</Alert>}
         {waitlistSlot && (
           <>
-            <div style={{ background: '#fff3e0', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', border: '1px solid #ffcc80' }}>
-              <div style={{ fontWeight: '600', color: '#e65100', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ background: 'var(--color-warning-bg)', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', border: '1px solid var(--color-warning)' }}>
+              <div style={{ fontWeight: '600', color: 'var(--color-warning)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Users size={18} /> This slot is currently booked
               </div>
-              <p style={{ color: '#666', margin: 0, fontSize: '0.9rem' }}>
+              <p style={{ color: 'var(--color-text-secondary)', margin: 0, fontSize: '0.9rem' }}>
                 Join the waitlist to be notified if the appointment is cancelled. You'll get an alert and can book the slot before anyone else!
               </p>
             </div>
-            <div style={{ background: '#f8f6f3', borderRadius: '8px', padding: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Calendar size={18} color="#1e3a5f" /><strong>{formatDate(waitlistSlot.date)}</strong></div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Clock size={18} color="#1e3a5f" /><span>{formatTime(waitlistSlot.start_time)} - {formatTime(waitlistSlot.end_time)}</span></div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><User size={18} color="#1e3a5f" /><span>{waitlistSlot.instructor?.first_name} {waitlistSlot.instructor?.last_name}</span></div>
+            <div style={{ background: 'var(--color-surface-hover)', borderRadius: '8px', padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Calendar size={18} color="var(--color-primary)" /><strong style={{ color: 'var(--color-text)' }}>{formatDate(waitlistSlot.date)}</strong></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}><Clock size={18} color="var(--color-primary)" /><span style={{ color: 'var(--color-text)' }}>{formatTime(waitlistSlot.start_time)} - {formatTime(waitlistSlot.end_time)}</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><User size={18} color="var(--color-primary)" /><span style={{ color: 'var(--color-text)' }}>{waitlistSlot.instructor?.first_name} {waitlistSlot.instructor?.last_name}</span></div>
             </div>
           </>
         )}

@@ -70,7 +70,7 @@ const RecurringAvailability = () => {
         
         <Card>
           {loading ? <div style={{textAlign:'center',padding:'2rem'}}><Spinner/></div> : patterns.length === 0 ? (
-            <div style={{textAlign:'center',padding:'3rem',color:'#888'}}>
+            <div style={{textAlign:'center',padding:'3rem',color:'var(--color-text-muted)'}}>
               <Calendar size={48} style={{marginBottom:'1rem',opacity:0.5}}/>
               <h3>No recurring patterns</h3>
               <p>Create a pattern to automatically generate weekly office hours slots.</p>
@@ -78,11 +78,11 @@ const RecurringAvailability = () => {
           ) : (
             <div style={{display:'grid',gap:'1rem'}}>
               {patterns.map(p => (
-                <div key={p.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1rem',background:'#f8f6f3',borderRadius:'8px',borderLeft:'4px solid #c9a227'}}>
+                <div key={p.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1rem',background:'var(--color-surface-hover)',borderRadius:'8px',borderLeft:'4px solid var(--color-accent)'}}>
                   <div>
-                    <strong style={{color:'#1e3a5f',fontSize:'1.1rem'}}>{p.day_name}s</strong>
-                    <div style={{color:'#666',marginTop:'4px'}}>{p.start_time} - {p.end_time}</div>
-                    <div style={{color:'#888',fontSize:'0.875rem'}}>{p.location || 'No location'} • {p.meeting_type} • {p.buffer_minutes}min buffer</div>
+                    <strong style={{color:'var(--color-text)',fontSize:'1.1rem'}}>{p.day_name}s</strong>
+                    <div style={{color:'var(--color-text-secondary)',marginTop:'4px'}}>{p.start_time} - {p.end_time}</div>
+                    <div style={{color:'var(--color-text-muted)',fontSize:'0.875rem'}}>{p.location || 'No location'} • {p.meeting_type} • {p.buffer_minutes}min buffer</div>
                   </div>
                   <div style={{display:'flex',gap:'0.5rem'}}>
                     <button className="btn btn-secondary btn-sm" onClick={() => handleRegenerate(p.id)} title="Generate more slots"><RefreshCw size={16}/></button>

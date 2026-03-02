@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useUsers } from '../hooks/useData';
 import { adminAPI } from '../utils/api';
-import { Users, Plus, Edit2, UserX, UserCheck, Copy, Check } from 'lucide-react';
+import { Users, Plus, Edit2, UserX, UserCheck, Copy, Check, Mail, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   PageHeader, Card, Spinner, Modal, FormInput, FormSelect,
   Alert, RoleBadge, EmptyState
@@ -9,8 +9,9 @@ import {
 import { formatDate } from '../utils/dateUtils';
 
 const AdminUsers = () => {
+  const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({ role: '', search: '' });
-  const { users, loading, refetch } = useUsers(filters);
+  const { users, pagination, loading, refetch } = useUsers({ ...filters, page, limit: 20 });
 
   const [createModal, setCreateModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
@@ -110,6 +111,29 @@ const AdminUsers = () => {
     }
   };
 
+  const handleResendInvite = async (user) => {
+    setActionLoading(true);
+    try {
+      const res = await adminAPI.resendInvite(user.id);
+      setSuccess(`Invite resent to ${user.email}. New temp password: ${res.data.temp_password}`);
+      setTimeout(() => setSuccess(''), 10000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to resend invite');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSearchChange = (e) => {
+    setFilters({ ...filters, search: e.target.value });
+    setPage(1);
+  };
+
+  const handleRoleChange = (e) => {
+    setFilters({ ...filters, role: e.target.value });
+    setPage(1);
+  };
+
   return (
     <>
       <PageHeader
@@ -130,14 +154,14 @@ const AdminUsers = () => {
           <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '200px' }}>
               <FormInput
-                placeholder="Search by name or email..."
+                placeholder="Search by name, email, or department..."
                 value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                onChange={handleSearchChange}
               />
             </div>
             <FormSelect
               value={filters.role}
-              onChange={(e) => setFilters({ ...filters, role: e.target.value })}
+              onChange={handleRoleChange}
               placeholder="All Roles"
               options={[
                 { value: 'student', label: 'Students' },
@@ -154,53 +178,117 @@ const AdminUsers = () => {
           ) : users.length === 0 ? (
             <EmptyState icon={Users} title="No users found" description="Try adjusting your filters." />
           ) : (
-            <div className="table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Department</th>
-                    <th>Status</th>
-                    <th>Last Login</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map(user => (
-                    <tr key={user.id}>
-                      <td><strong>{user.first_name} {user.last_name}</strong></td>
-                      <td>{user.email}</td>
-                      <td><RoleBadge role={user.role} /></td>
-                      <td>{user.department || '—'}</td>
-                      <td>
-                        <span className={`badge ${user.is_active ? 'badge-success' : 'badge-error'}`}>
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="text-sm text-secondary">
-                        {user.last_login ? formatDate(user.last_login, 'MMM d, yyyy') : 'Never'}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => openEditModal(user)}>
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => handleToggleActive(user)}
-                            style={{ color: user.is_active ? 'var(--color-error)' : 'var(--color-success)' }}
-                          >
-                            {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
-                          </button>
-                        </div>
-                      </td>
+            <>
+              <div className="table-container">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Department</th>
+                      <th>Status</th>
+                      <th>Last Login</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {users.map(user => (
+                      <tr key={user.id}>
+                        <td>
+                          <strong>{user.first_name} {user.last_name}</strong>
+                          {user.must_change_password ? (
+                            <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', background: 'var(--color-warning-bg)', color: 'var(--color-warning)', borderRadius: '4px', padding: '1px 6px' }}>
+                              Setup Pending
+                            </span>
+                          ) : null}
+                        </td>
+                        <td>{user.email}</td>
+                        <td><RoleBadge role={user.role} /></td>
+                        <td>{user.department || '—'}</td>
+                        <td>
+                          <span className={`badge ${user.is_active ? 'badge-success' : 'badge-error'}`}>
+                            {user.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="text-sm text-secondary">
+                          {user.last_login ? formatDate(user.last_login, 'MMM d, yyyy') : 'Never'}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                            <button className="btn btn-ghost btn-sm" onClick={() => openEditModal(user)} title="Edit user">
+                              <Edit2 size={14} />
+                            </button>
+                            {user.must_change_password && (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => handleResendInvite(user)}
+                                title="Resend invite email"
+                                style={{ color: 'var(--color-info)' }}
+                              >
+                                <Mail size={14} />
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => handleToggleActive(user)}
+                              style={{ color: user.is_active ? 'var(--color-error)' : 'var(--color-success)' }}
+                              title={user.is_active ? 'Deactivate' : 'Reactivate'}
+                            >
+                              {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {pagination && pagination.pages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '0.5rem 0', borderTop: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                    Showing {(page - 1) * pagination.limit + 1}–{Math.min(page * pagination.limit, pagination.total)} of {pagination.total} users
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setPage(p => p - 1)}
+                      disabled={page === 1}
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    {Array.from({ length: pagination.pages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === pagination.pages || Math.abs(p - page) <= 1)
+                      .reduce((acc, p, idx, arr) => {
+                        if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                        acc.push(p);
+                        return acc;
+                      }, [])
+                      .map((p, i) => p === '...' ? (
+                        <span key={`ellipsis-${i}`} style={{ padding: '0 0.25rem', color: 'var(--color-text-muted)' }}>…</span>
+                      ) : (
+                        <button
+                          key={p}
+                          className={`btn btn-sm ${p === page ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setPage(p)}
+                        >
+                          {p}
+                        </button>
+                      ))
+                    }
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setPage(p => p + 1)}
+                      disabled={page === pagination.pages}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </Card>
       </div>
@@ -238,8 +326,8 @@ const AdminUsers = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <code style={{
                   flex: 1,
-                  background: 'white',
-                  border: '1px solid var(--color-border, #e5e7eb)',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--border-color)',
                   padding: '0.5rem 0.75rem',
                   borderRadius: 'var(--radius-sm)',
                   fontSize: '1.1rem',
