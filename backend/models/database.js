@@ -185,6 +185,9 @@ async function initializeDatabase() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'audit_logs' AND column_name = 'entity_id') THEN
           ALTER TABLE audit_logs ADD COLUMN entity_id VARCHAR(255);
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'recurring_patterns' AND column_name = 'slot_duration') THEN
+          ALTER TABLE recurring_patterns ADD COLUMN slot_duration INTEGER DEFAULT 30;
+        END IF;
       END $$;
     `);
 
@@ -198,6 +201,7 @@ async function initializeDatabase() {
         location VARCHAR(255),
         meeting_type VARCHAR(50) DEFAULT 'either',
         buffer_minutes INTEGER DEFAULT 0,
+        slot_duration INTEGER DEFAULT 30,
         notes TEXT,
         start_date DATE,
         end_date DATE,
