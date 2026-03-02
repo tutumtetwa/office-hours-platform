@@ -166,11 +166,26 @@ async function initializeDatabase() {
         id VARCHAR(255) PRIMARY KEY,
         user_id VARCHAR(255),
         action VARCHAR(255),
+        entity_type VARCHAR(255),
+        entity_id VARCHAR(255),
         details TEXT,
         ip_address VARCHAR(255),
         user_agent TEXT,
         created_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // Add entity_type/entity_id columns to audit_logs if missing (existing DBs)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'audit_logs' AND column_name = 'entity_type') THEN
+          ALTER TABLE audit_logs ADD COLUMN entity_type VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'audit_logs' AND column_name = 'entity_id') THEN
+          ALTER TABLE audit_logs ADD COLUMN entity_id VARCHAR(255);
+        END IF;
+      END $$;
     `);
 
     await pool.query(`
@@ -233,10 +248,16 @@ async function createDemoUsers() {
     const exists = await pool.query('SELECT id FROM users WHERE email = $1', [user.email]);
     if (exists.rows.length === 0) {
       await pool.query(
-        'INSERT INTO users (id, email, password, first_name, last_name, phone_number, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        'INSERT INTO users (id, email, password, first_name, last_name, phone_number, role, department, is_active, email_verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, 1)',
         [uuidv4(), user.email, bcrypt.hashSync(user.password, 10), user.first_name, user.last_name, user.phone_number, user.role, user.department]
       );
       console.log(`Created user: ${user.email}`);
+    } else {
+      // Ensure existing demo users are verified (in case migration ran before this fix)
+      await pool.query(
+        'UPDATE users SET email_verified = 1, is_active = 1 WHERE email = $1 AND email_verified = 0',
+        [user.email]
+      );
     }
   }
 

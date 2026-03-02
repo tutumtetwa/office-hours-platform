@@ -422,6 +422,7 @@ router.post('/login', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
 
+    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
     await logAction(user.id, 'LOGIN_SUCCESS', 'user', user.id, {}, req.ip);
 
     res.json({
