@@ -2,8 +2,33 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../models/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const { Resend } = require('resend');
 
 const router = express.Router();
+
+// Initialize Resend
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// Helper to send email
+async function sendEmail(to, subject, html) {
+  if (!resend) {
+    console.log('[DEV MODE] Email to:', to, 'Subject:', subject);
+    return true;
+  }
+  try {
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'noreply@officehourscs370.online',
+      to,
+      subject,
+      html
+    });
+    console.log('Email sent to:', to);
+    return true;
+  } catch (e) {
+    console.error('Email error:', e);
+    return false;
+  }
+}
 
 // Helper to log actions
 async function logAction(userId, action, details = {}, req = null) {
@@ -105,7 +130,7 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
     
     // Get slot with instructor info
     const slotResult = await pool.query(`
-      SELECT s.*, u.first_name, u.last_name 
+      SELECT s.*, u.first_name, u.last_name, u.email as instructor_email
       FROM availability_slots s 
       JOIN users u ON s.instructor_id = u.id
       WHERE s.id = $1
@@ -153,12 +178,13 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
     // Remove student from waitlist if they were on it
     await pool.query('DELETE FROM waitlist WHERE slot_id = $1 AND student_id = $2', [slot_id, req.user.userId]);
     
-    // Get student info for notification
-    const studentResult = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.userId]);
+    // Get student info
+    const studentResult = await pool.query('SELECT first_name, last_name, email FROM users WHERE id = $1', [req.user.userId]);
     const student = studentResult.rows[0];
     
-    // Notify instructor
-    const formattedDate = new Date(slot.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const formattedDate = new Date(slot.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    
+    // Notify instructor (in-app)
     await createNotification(
       slot.instructor_id,
       'new_booking',
@@ -166,12 +192,59 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
       `${student.first_name} ${student.last_name} booked an appointment with you on ${formattedDate} at ${slot.start_time}.`
     );
     
-    // Notify student (confirmation)
+    // Notify student (in-app)
     await createNotification(
       req.user.userId,
       'booking_confirmed',
       'Booking Confirmed',
       `Your appointment with ${slot.first_name} ${slot.last_name} on ${formattedDate} at ${slot.start_time} has been confirmed.`
+    );
+    
+    // EMAIL: Send confirmation to student
+    await sendEmail(
+      student.email,
+      '✅ Appointment Confirmed - Office Hours',
+      `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #1e3a5f;">Appointment Confirmed!</h2>
+          <p>Hi ${student.first_name},</p>
+          <p>Your appointment has been successfully booked.</p>
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+            <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${slot.start_time} - ${slot.end_time}</p>
+            <p style="margin: 5px 0;"><strong>👨‍🏫 Instructor:</strong> ${slot.first_name} ${slot.last_name}</p>
+            <p style="margin: 5px 0;"><strong>📍 Location:</strong> ${slot.location || 'TBD'}</p>
+            ${topic ? `<p style="margin: 5px 0;"><strong>📝 Topic:</strong> ${topic}</p>` : ''}
+          </div>
+          <p>Need to make changes? <a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/my-appointments">Manage your appointments</a></p>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
+        </div>
+      `
+    );
+    
+    // EMAIL: Send notification to instructor
+    await sendEmail(
+      slot.instructor_email,
+      '📅 New Appointment Booked - Office Hours',
+      `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #1e3a5f;">New Appointment</h2>
+          <p>Hi ${slot.first_name},</p>
+          <p>A student has booked an appointment with you.</p>
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>👤 Student:</strong> ${student.first_name} ${student.last_name}</p>
+            <p style="margin: 5px 0;"><strong>📧 Email:</strong> ${student.email}</p>
+            <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+            <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${slot.start_time} - ${slot.end_time}</p>
+            <p style="margin: 5px 0;"><strong>📍 Location:</strong> ${slot.location || 'TBD'}</p>
+            ${topic ? `<p style="margin: 5px 0;"><strong>📝 Topic:</strong> ${topic}</p>` : ''}
+          </div>
+          <p><a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/my-appointments">View all appointments</a></p>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
+        </div>
+      `
     );
     
     await logAction(req.user.userId, 'APPOINTMENT_BOOKED', { appointment_id: appointmentId, instructor_id: slot.instructor_id, date: slot.date }, req);
@@ -191,8 +264,8 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
     // Get appointment details
     const aptResult = await pool.query(`
       SELECT a.*, 
-        i.first_name as instructor_first_name, i.last_name as instructor_last_name,
-        s.first_name as student_first_name, s.last_name as student_last_name
+        i.first_name as instructor_first_name, i.last_name as instructor_last_name, i.email as instructor_email,
+        s.first_name as student_first_name, s.last_name as student_last_name, s.email as student_email
       FROM appointments a
       JOIN users i ON a.instructor_id = i.id
       JOIN users s ON a.student_id = s.id
@@ -216,27 +289,71 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
       [req.user.userId, reason, req.params.id]
     );
     
-    const formattedDate = new Date(apt.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const formattedDate = new Date(apt.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     const cancelledBy = req.user.userId === apt.student_id ? 'student' : 'instructor';
     
-    // Notify the other party
+    // Notify the other party (in-app)
     if (cancelledBy === 'student') {
       await createNotification(
         apt.instructor_id,
         'booking_cancelled',
         'Appointment Cancelled',
-        `${apt.student_first_name} ${apt.student_last_name} cancelled their appointment on ${formattedDate} at ${apt.start_time}. Reason: ${reason || 'Not specified'}`
+        `${apt.student_first_name} ${apt.student_last_name} cancelled their appointment on ${formattedDate} at ${apt.start_time}.`
+      );
+      
+      // EMAIL to instructor
+      await sendEmail(
+        apt.instructor_email,
+        '❌ Appointment Cancelled - Office Hours',
+        `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #dc3545;">Appointment Cancelled</h2>
+            <p>Hi ${apt.instructor_first_name},</p>
+            <p>An appointment has been cancelled by the student.</p>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>👤 Student:</strong> ${apt.student_first_name} ${apt.student_last_name}</p>
+              <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+              <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${apt.start_time} - ${apt.end_time}</p>
+              ${reason ? `<p style="margin: 5px 0;"><strong>📝 Reason:</strong> ${reason}</p>` : ''}
+            </div>
+            <p>This time slot is now available for other students to book.</p>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
+          </div>
+        `
       );
     } else {
       await createNotification(
         apt.student_id,
         'booking_cancelled',
         'Appointment Cancelled',
-        `${apt.instructor_first_name} ${apt.instructor_last_name} cancelled your appointment on ${formattedDate} at ${apt.start_time}. Reason: ${reason || 'Not specified'}`
+        `${apt.instructor_first_name} ${apt.instructor_last_name} cancelled your appointment on ${formattedDate} at ${apt.start_time}.`
+      );
+      
+      // EMAIL to student
+      await sendEmail(
+        apt.student_email,
+        '❌ Appointment Cancelled - Office Hours',
+        `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #dc3545;">Appointment Cancelled</h2>
+            <p>Hi ${apt.student_first_name},</p>
+            <p>Your appointment has been cancelled by the instructor.</p>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>👨‍🏫 Instructor:</strong> ${apt.instructor_first_name} ${apt.instructor_last_name}</p>
+              <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+              <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${apt.start_time} - ${apt.end_time}</p>
+              ${reason ? `<p style="margin: 5px 0;"><strong>📝 Reason:</strong> ${reason}</p>` : ''}
+            </div>
+            <p><a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/book">Book another appointment</a></p>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
+          </div>
+        `
       );
     }
     
-    // NOTIFY WAITLIST - Important!
+    // NOTIFY WAITLIST
     try {
       const waitlistRoute = require('./waitlist');
       if (waitlistRoute.notifyNextOnWaitlist) {
@@ -258,7 +375,7 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
 // Complete appointment
 router.post('/:id/complete', authenticateToken, authorize('instructor', 'admin'), async (req, res) => {
   try {
-    const { status } = req.body; // 'completed' or 'no-show'
+    const { status } = req.body;
     
     if (!['completed', 'no-show'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status. Use "completed" or "no-show"' });
