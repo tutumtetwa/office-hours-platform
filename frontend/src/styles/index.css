@@ -1269,6 +1269,48 @@ a:hover {
   border-color: var(--border-color);
 }
 
+/* --color-primary-dark (#142740) is invisible on dark backgrounds.
+   Override all elements that use it as text color. */
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  color: var(--color-text);
+}
+
+.dark .card-title {
+  color: var(--color-text);
+}
+
+.dark .stat-value {
+  color: var(--color-text);
+}
+
+.dark .slot-time {
+  color: var(--color-text);
+}
+
+.dark .card-footer {
+  background: var(--color-surface-hover);
+  border-top-color: var(--border-color);
+}
+
+/* date group headers inside appointments list */
+.dark .appointments-date-header,
+.dark h3[style*="color-primary-dark"],
+.dark h3[style*="primary-dark"] {
+  color: var(--color-text) !important;
+}
+
+/* date-btn in availability calendar */
+.dark .date-btn {
+  background: var(--color-surface);
+  border-color: var(--border-color);
+  color: var(--color-text);
+}
+
+.dark .date-btn.active, .dark .date-btn:hover {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
 .dark .table th {
   background-color: #1a2332;
   color: var(--color-text-secondary);

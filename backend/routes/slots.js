@@ -110,25 +110,38 @@ router.get('/my-slots', authenticateToken, authorize('instructor', 'admin'), asy
 router.post('/', authenticateToken, authorize('instructor', 'admin'), async (req, res) => {
   try {
     const { date, start_time, end_time, location, meeting_type, notes } = req.body;
-    
+
+    if (!date || !start_time || !end_time) {
+      return res.status(400).json({ error: 'Date, start time, and end time are required' });
+    }
+
     // Validate not in the past
     const now = new Date();
     const slotDateTime = new Date(`${date}T${start_time}`);
     if (slotDateTime <= now) {
       return res.status(400).json({ error: 'Cannot create slots in the past' });
     }
-    
+
+    // Check for duplicate slot
+    const existing = await pool.query(
+      'SELECT id FROM availability_slots WHERE instructor_id = $1 AND date = $2 AND start_time = $3',
+      [req.user.userId, date, start_time]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'You already have an availability slot at this time' });
+    }
+
     const slotId = uuidv4();
-    
+
     await pool.query(
       'INSERT INTO availability_slots (id, instructor_id, date, start_time, end_time, location, meeting_type, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
-      [slotId, req.user.userId, date, start_time, end_time, location, meeting_type || 'either', notes]
+      [slotId, req.user.userId, date, start_time, end_time, location || null, meeting_type || 'either', notes || null]
     );
-    
+
     res.status(201).json({ message: 'Slot created', slot_id: slotId });
   } catch (error) {
-    console.error('Create slot error:', error);
-    res.status(500).json({ error: 'Failed to create slot' });
+    console.error('Create slot error:', error.message);
+    res.status(500).json({ error: 'Failed to create slot: ' + error.message });
   }
 });
 

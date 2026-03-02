@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { notificationsAPI } from '../utils/api';
@@ -91,10 +91,10 @@ const Layout = ({ children }) => {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="sidebar-logo">
+            <Link to="/dashboard" className="sidebar-logo" style={{ textDecoration: 'none', color: 'inherit' }}>
               <GraduationCap size={28} />
               <span>Office Hours</span>
-            </div>
+            </Link>
             
             <div style={{ display: 'flex', gap: '8px' }}>
               {/* Dark Mode Toggle */}

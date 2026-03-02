@@ -132,11 +132,11 @@ const MyAppointments = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)' }}>
               {sortedDates.map(date => (
                 <div key={date}>
-                  <h3 style={{ 
+                  <h3 style={{
                     marginBottom: 'var(--space-md)',
                     paddingBottom: 'var(--space-sm)',
                     borderBottom: '2px solid var(--color-primary)',
-                    color: 'var(--color-primary-dark)'
+                    color: 'var(--color-text)'
                   }}>
                     {getRelativeDateLabel(date)}
                   </h3>
