@@ -11,7 +11,7 @@ const EMAIL_CONFIG = {
     pass: process.env.SMTP_PASS || ''
   }
 };
-
+ 
 let transporter = null;
 const APP_NAME = 'Office Hours';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
@@ -221,18 +221,8 @@ const emailService = {
   initialize: initializeEmailService,
   
   sendBookingConfirmation: async (appointment, student, instructor) => {
-    // Check student preference
-    if (student.email_booking_confirmation !== false) {
-      await sendEmail(student.email, 'bookingConfirmationStudent', [appointment, student, instructor]);
-    } else {
-      console.log(`📧 Skipped booking confirmation to student ${student.email} (preference disabled)`);
-    }
-    // Check instructor preference
-    if (instructor.email_booking_confirmation !== false) {
-      await sendEmail(instructor.email, 'bookingNotificationInstructor', [appointment, student, instructor]);
-    } else {
-      console.log(`📧 Skipped booking notification to instructor ${instructor.email} (preference disabled)`);
-    }
+    await sendEmail(student.email, 'bookingConfirmationStudent', [appointment, student, instructor]);
+    await sendEmail(instructor.email, 'bookingNotificationInstructor', [appointment, student, instructor]);
   },
 
   sendCancellationNotification: async (appointment, student, instructor, cancelledByRole, reason) => {
@@ -241,50 +231,23 @@ const emailService = {
       : `${instructor.first_name} ${instructor.last_name}`;
     
     if (cancelledByRole === 'student') {
-      // Notify instructor
-      if (instructor.email_cancellation !== false) {
-        await sendEmail(instructor.email, 'cancellationNotification', [appointment, instructor, cancelledBy, reason]);
-      } else {
-        console.log(`📧 Skipped cancellation email to instructor ${instructor.email} (preference disabled)`);
-      }
+      await sendEmail(instructor.email, 'cancellationNotification', [appointment, instructor, cancelledBy, reason]);
     } else {
-      // Notify student
-      if (student.email_cancellation !== false) {
-        await sendEmail(student.email, 'cancellationNotification', [appointment, student, cancelledBy, reason]);
-      } else {
-        console.log(`📧 Skipped cancellation email to student ${student.email} (preference disabled)`);
-      }
+      await sendEmail(student.email, 'cancellationNotification', [appointment, student, cancelledBy, reason]);
     }
   },
 
   sendReminder24h: async (appointment, student, instructor) => {
-    if (student.email_booking_reminder !== false) {
-      await sendEmail(student.email, 'reminder24h', [appointment, student, instructor, true]);
-    } else {
-      console.log(`📧 Skipped 24h reminder to student ${student.email} (preference disabled)`);
-    }
-    if (instructor.email_booking_reminder !== false) {
-      await sendEmail(instructor.email, 'reminder24h', [appointment, instructor, student, false]);
-    } else {
-      console.log(`📧 Skipped 24h reminder to instructor ${instructor.email} (preference disabled)`);
-    }
+    await sendEmail(student.email, 'reminder24h', [appointment, student, instructor, true]);
+    await sendEmail(instructor.email, 'reminder24h', [appointment, instructor, student, false]);
   },
 
   sendReminder1h: async (appointment, student, instructor) => {
-    if (student.email_booking_reminder !== false) {
-      await sendEmail(student.email, 'reminder1h', [appointment, student, instructor, true]);
-    } else {
-      console.log(`📧 Skipped 1h reminder to student ${student.email} (preference disabled)`);
-    }
-    if (instructor.email_booking_reminder !== false) {
-      await sendEmail(instructor.email, 'reminder1h', [appointment, instructor, student, false]);
-    } else {
-      console.log(`📧 Skipped 1h reminder to instructor ${instructor.email} (preference disabled)`);
-    }
+    await sendEmail(student.email, 'reminder1h', [appointment, student, instructor, true]);
+    await sendEmail(instructor.email, 'reminder1h', [appointment, instructor, student, false]);
   },
 
   sendWaitlistNotification: async (slot, student, instructor) => {
-    // Always send waitlist notifications - user explicitly signed up for this
     await sendEmail(student.email, 'waitlistSpotAvailable', [slot, student, instructor]);
   }
 };
