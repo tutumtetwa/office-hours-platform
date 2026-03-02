@@ -39,7 +39,10 @@ export const authAPI = {
   logout: () => api.post('/auth/logout'),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/profile', data),
-  updatePassword: (currentPassword, newPassword) => api.put('/auth/password', { current_password: currentPassword, new_password: newPassword })
+  updatePassword: (currentPassword, newPassword) => api.put('/auth/password', { current_password: currentPassword, new_password: newPassword }),
+  verifyEmail: (verificationToken, code) => api.post('/auth/verify-email', { verification_token: verificationToken, code }),
+  resendVerification: (verificationToken) => api.post('/auth/resend-verification', { verification_token: verificationToken }),
+  setupPassword: (setupToken, newPassword) => api.post('/auth/setup-password', { setup_token: setupToken, new_password: newPassword })
 };
 
 export const slotsAPI = {

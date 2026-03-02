@@ -20,15 +20,23 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const response = await authAPI.login(email, password);
-      const { token, user: userData } = response.data;
+      const data = response.data;
 
+      if (data.must_change_password) {
+        return { success: false, must_change_password: true, setup_token: data.setup_token };
+      }
+
+      const { token, user: userData } = data;
       setAuthToken(token);
       setUser(userData);
-      
       return { success: true };
     } catch (err) {
-      const message = err.response?.data?.error || 'Login failed';
+      const data = err.response?.data;
+      const message = data?.error || 'Login failed';
       setError(message);
+      if (data?.needs_verification) {
+        return { success: false, error: message, needs_verification: true, verification_token: data.verification_token };
+      }
       return { success: false, error: message };
     }
   }, []);
@@ -40,6 +48,40 @@ export const AuthProvider = ({ children }) => {
       return { success: true, data: response.data };
     } catch (err) {
       const message = err.response?.data?.error || 'Registration failed';
+      setError(message);
+      return { success: false, error: message };
+    }
+  }, []);
+
+  const verifyEmail = useCallback(async (verificationToken, code) => {
+    setError(null);
+    try {
+      const response = await authAPI.verifyEmail(verificationToken, code);
+      const { token, user: userData } = response.data;
+      setAuthToken(token);
+      setUser(userData);
+      return { success: true };
+    } catch (err) {
+      const message = err.response?.data?.error || 'Verification failed';
+      setError(message);
+      return { success: false, error: message };
+    }
+  }, []);
+
+  const setupPassword = useCallback(async (setupToken, newPassword) => {
+    setError(null);
+    try {
+      const response = await authAPI.setupPassword(setupToken, newPassword);
+      const data = response.data;
+      if (data.verification_token) {
+        return { success: true, verification_token: data.verification_token };
+      }
+      const { token, user: userData } = data;
+      setAuthToken(token);
+      setUser(userData);
+      return { success: true };
+    } catch (err) {
+      const message = err.response?.data?.error || 'Setup failed';
       setError(message);
       return { success: false, error: message };
     }
@@ -88,6 +130,8 @@ export const AuthProvider = ({ children }) => {
     isAdmin: user?.role === 'admin',
     login,
     register,
+    verifyEmail,
+    setupPassword,
     logout,
     updateProfile,
     updatePassword,

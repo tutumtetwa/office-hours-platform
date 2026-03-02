@@ -53,8 +53,8 @@ async function initializeDatabase() {
 
     // Add phone_number column if it doesn't exist (for existing databases)
     await pool.query(`
-      DO $$ 
-      BEGIN 
+      DO $$
+      BEGIN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'phone_number') THEN
           ALTER TABLE users ADD COLUMN phone_number VARCHAR(20);
         END IF;
@@ -64,7 +64,33 @@ async function initializeDatabase() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'email_notifications') THEN
           ALTER TABLE users ADD COLUMN email_notifications INTEGER DEFAULT 1;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'email_verified') THEN
+          ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'must_change_password') THEN
+          ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;
+        END IF;
       END $$;
+    `);
+
+    // Set email_verified = 1 for pre-existing users (no pending verification entry)
+    // so they aren't locked out after the migration. Safe to run multiple times.
+    await pool.query(`
+      UPDATE users SET email_verified = 1
+      WHERE (email_verified IS NULL OR email_verified = 0)
+      AND NOT EXISTS (SELECT 1 FROM email_verifications WHERE user_id = users.id)
+    `);
+
+    // Create email_verifications table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_verifications (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL UNIQUE,
+        verification_token VARCHAR(255) NOT NULL,
+        code VARCHAR(10) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
     `);
 
     // Create password_resets table

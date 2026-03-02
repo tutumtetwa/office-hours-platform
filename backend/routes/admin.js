@@ -1,8 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const { pool } = require('../models/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const { sendWelcomeEmail } = require('./auth');
 
 const router = express.Router();
 
@@ -39,27 +41,52 @@ router.get('/users', authenticateToken, authorize('admin'), async (req, res) => 
   }
 });
 
+function generateTempPassword() {
+  return crypto.randomBytes(6).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 8);
+}
+
 // Create user
 router.post('/users', authenticateToken, authorize('admin'), async (req, res) => {
   try {
-    const { email, password, first_name, last_name, role, department } = req.body;
-    
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const { email, first_name, last_name, role, department } = req.body;
+
+    if (!email || !first_name || !last_name) {
+      return res.status(400).json({ error: 'Email, first name, and last name are required' });
+    }
+
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Email already exists' });
     }
-    
-    const hashedPassword = bcrypt.hashSync(password, 10);
+
+    const tempPassword = generateTempPassword();
+    const hashedPassword = bcrypt.hashSync(tempPassword, 10);
     const userId = uuidv4();
-    
+
     await pool.query(
-      'INSERT INTO users (id, email, password, first_name, last_name, role, department) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [userId, email, hashedPassword, first_name, last_name, role || 'student', department]
+      `INSERT INTO users (id, email, password, first_name, last_name, role, department, is_active, email_verified, must_change_password, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 0, 1, NOW(), NOW())`,
+      [userId, email.toLowerCase(), hashedPassword, first_name, last_name, role || 'student', department || null]
     );
-    
+
+    // Create setup token in password_resets (temp_token = 'setup' marker)
+    const setupToken = crypto.randomBytes(32).toString('hex');
+    await pool.query(
+      `INSERT INTO password_resets (id, user_id, temp_token, reset_token, expires_at, created_at)
+       VALUES ($1, $2, 'setup', $3, NOW() + INTERVAL '7 days', NOW())`,
+      [uuidv4(), userId, setupToken]
+    );
+
+    // Send welcome email with temp credentials
+    await sendWelcomeEmail(email.toLowerCase(), first_name, tempPassword);
+
     await logAction(req.user.id, 'USER_CREATED', { created_user_id: userId, email, role }, req);
-    
-    res.status(201).json({ message: 'User created', user: { id: userId, email, first_name, last_name, role } });
+
+    res.status(201).json({
+      message: 'User created',
+      user: { id: userId, email: email.toLowerCase(), first_name, last_name, role: role || 'student' },
+      temp_password: tempPassword
+    });
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({ error: 'Failed to create user' });

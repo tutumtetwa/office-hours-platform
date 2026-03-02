@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../models/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const emailService = require('../utils/emailService');
 
 const router = express.Router();
 
@@ -241,7 +242,17 @@ async function notifyNextOnWaitlist(slotId) {
       'Spot Available!',
       `A slot with ${next.instructor_first_name} ${next.instructor_last_name} on ${formattedDate} at ${next.start_time} is now available! Book it before someone else does.`
     );
-    
+
+    // Send email notification
+    try {
+      const student = { first_name: next.first_name, email: next.email };
+      const instructor = { first_name: next.instructor_first_name, last_name: next.instructor_last_name };
+      const slot = { date: next.date, start_time: next.start_time, end_time: next.end_time };
+      await emailService.sendWaitlistNotification(slot, student, instructor);
+    } catch (emailErr) {
+      console.error('Failed to send waitlist email:', emailErr);
+    }
+
     return next;
   } catch (error) {
     console.error('Notify waitlist error:', error);

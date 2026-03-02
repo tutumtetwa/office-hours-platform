@@ -1,30 +1,33 @@
 import React, { useState } from 'react';
 import { useUsers } from '../hooks/useData';
 import { adminAPI } from '../utils/api';
-import { Users, Plus, Edit2, UserX, UserCheck, Search } from 'lucide-react';
-import { 
-  PageHeader, Card, Spinner, Modal, FormInput, FormSelect, 
-  Alert, RoleBadge, EmptyState 
+import { Users, Plus, Edit2, UserX, UserCheck, Copy, Check } from 'lucide-react';
+import {
+  PageHeader, Card, Spinner, Modal, FormInput, FormSelect,
+  Alert, RoleBadge, EmptyState
 } from '../components/UI';
 import { formatDate } from '../utils/dateUtils';
 
 const AdminUsers = () => {
   const [filters, setFilters] = useState({ role: '', search: '' });
   const { users, loading, refetch } = useUsers(filters);
-  
+
   const [createModal, setCreateModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [formData, setFormData] = useState({
-    email: '', password: '', first_name: '', last_name: '', role: 'student', department: ''
+    email: '', first_name: '', last_name: '', role: 'student', department: ''
   });
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [tempPassword, setTempPassword] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const openCreateModal = () => {
-    setFormData({ email: '', password: '', first_name: '', last_name: '', role: 'student', department: '' });
+    setFormData({ email: '', first_name: '', last_name: '', role: 'student', department: '' });
     setError('');
+    setTempPassword(null);
     setCreateModal(true);
   };
 
@@ -45,15 +48,30 @@ const AdminUsers = () => {
     setActionLoading(true);
     setError('');
     try {
-      await adminAPI.createUser(formData);
-      setSuccess('User created successfully');
-      setCreateModal(false);
+      const response = await adminAPI.createUser(formData);
+      const { temp_password } = response.data;
+      setTempPassword(temp_password);
       refetch();
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create user');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleCopyPassword = () => {
+    navigator.clipboard.writeText(tempPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCloseCreateModal = () => {
+    setCreateModal(false);
+    setTempPassword(null);
+    setCopied(false);
+    if (tempPassword) {
+      setSuccess('User created successfully. A welcome email with login instructions was sent.');
+      setTimeout(() => setSuccess(''), 5000);
     }
   };
 
@@ -94,7 +112,7 @@ const AdminUsers = () => {
 
   return (
     <>
-      <PageHeader 
+      <PageHeader
         title="Manage Users"
         subtitle="View and manage system users"
         action={
@@ -103,7 +121,7 @@ const AdminUsers = () => {
           </button>
         }
       />
-      
+
       <div className="page-content">
         {success && <Alert type="success" onClose={() => setSuccess('')}>{success}</Alert>}
         {error && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
@@ -169,8 +187,8 @@ const AdminUsers = () => {
                           <button className="btn btn-ghost btn-sm" onClick={() => openEditModal(user)}>
                             <Edit2 size={14} />
                           </button>
-                          <button 
-                            className="btn btn-ghost btn-sm" 
+                          <button
+                            className="btn btn-ghost btn-sm"
                             onClick={() => handleToggleActive(user)}
                             style={{ color: user.is_active ? 'var(--color-error)' : 'var(--color-success)' }}
                           >
@@ -188,29 +206,83 @@ const AdminUsers = () => {
       </div>
 
       {/* Create Modal */}
-      <Modal isOpen={createModal} onClose={() => setCreateModal(false)} title="Add New User" footer={
-        <>
-          <button className="btn btn-secondary" onClick={() => setCreateModal(false)}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleCreate} disabled={actionLoading}>
-            {actionLoading ? <Spinner size={18} /> : 'Create User'}
-          </button>
-        </>
+      <Modal isOpen={createModal} onClose={handleCloseCreateModal} title="Add New User" footer={
+        tempPassword ? (
+          <button className="btn btn-primary" onClick={handleCloseCreateModal}>Done</button>
+        ) : (
+          <>
+            <button className="btn btn-secondary" onClick={handleCloseCreateModal}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleCreate} disabled={actionLoading}>
+              {actionLoading ? <Spinner size={18} /> : 'Create User'}
+            </button>
+          </>
+        )
       }>
         {error && <Alert type="error">{error}</Alert>}
-        <div className="form-row">
-          <FormInput label="First Name" value={formData.first_name} onChange={(e) => setFormData({...formData, first_name: e.target.value})} required />
-          <FormInput label="Last Name" value={formData.last_name} onChange={(e) => setFormData({...formData, last_name: e.target.value})} required />
-        </div>
-        <FormInput label="Email" type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} required />
-        <FormInput label="Password" type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} required />
-        <div className="form-row">
-          <FormSelect label="Role" value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} options={[
-            { value: 'student', label: 'Student' },
-            { value: 'instructor', label: 'Instructor' },
-            { value: 'admin', label: 'Admin' }
-          ]} />
-          <FormInput label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} />
-        </div>
+
+        {tempPassword ? (
+          <div>
+            <Alert type="success">
+              User created successfully! A welcome email has been sent with login instructions.
+            </Alert>
+            <div style={{
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-accent)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1rem',
+              marginTop: '1rem'
+            }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
+                Temporary password (copy before closing):
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <code style={{
+                  flex: 1,
+                  background: 'white',
+                  border: '1px solid var(--color-border, #e5e7eb)',
+                  padding: '0.5rem 0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '1.1rem',
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.05em',
+                  color: 'var(--color-primary)'
+                }}>
+                  {tempPassword}
+                </code>
+                <button
+                  onClick={handleCopyPassword}
+                  className="btn btn-secondary btn-sm"
+                  style={{ flexShrink: 0 }}
+                >
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                The user will be required to change this password on first login.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="form-row">
+              <FormInput label="First Name" value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} required />
+              <FormInput label="Last Name" value={formData.last_name} onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} required />
+            </div>
+            <FormInput label="Email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+            <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem', marginTop: '-0.25rem' }}>
+              A temporary password will be auto-generated and emailed to the user.
+            </p>
+            <div className="form-row">
+              <FormSelect label="Role" value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} options={[
+                { value: 'student', label: 'Student' },
+                { value: 'instructor', label: 'Instructor' },
+                { value: 'admin', label: 'Admin' }
+              ]} />
+              <FormInput label="Department" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} />
+            </div>
+          </>
+        )}
       </Modal>
 
       {/* Edit Modal */}
@@ -224,17 +296,17 @@ const AdminUsers = () => {
       }>
         {error && <Alert type="error">{error}</Alert>}
         <div className="form-row">
-          <FormInput label="First Name" value={formData.first_name} onChange={(e) => setFormData({...formData, first_name: e.target.value})} required />
-          <FormInput label="Last Name" value={formData.last_name} onChange={(e) => setFormData({...formData, last_name: e.target.value})} required />
+          <FormInput label="First Name" value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} required />
+          <FormInput label="Last Name" value={formData.last_name} onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} required />
         </div>
-        <FormInput label="Email" type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} required />
+        <FormInput label="Email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
         <div className="form-row">
-          <FormSelect label="Role" value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} options={[
+          <FormSelect label="Role" value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} options={[
             { value: 'student', label: 'Student' },
             { value: 'instructor', label: 'Instructor' },
             { value: 'admin', label: 'Admin' }
           ]} />
-          <FormInput label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} />
+          <FormInput label="Department" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} />
         </div>
       </Modal>
     </>
