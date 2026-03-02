@@ -394,7 +394,7 @@ router.post('/login', async (req, res) => {
     }
 
     if (!user.is_active) {
-      return res.status(401).json({ error: 'Account is deactivated' });
+      return res.status(403).json({ error: 'Your account has been deactivated. Please contact admin@officehourscs370.online for assistance.' });
     }
 
     // Check if must change password (admin-provisioned user)
