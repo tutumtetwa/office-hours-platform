@@ -128,9 +128,10 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
   try {
     const { slot_id, meeting_type, topic, notes } = req.body;
     
-    // Get slot with instructor info
+    // Get slot with instructor info INCLUDING email preferences
     const slotResult = await pool.query(`
-      SELECT s.*, u.first_name, u.last_name, u.email as instructor_email
+      SELECT s.*, u.first_name, u.last_name, u.email as instructor_email,
+             u.email_booking_confirmation as instructor_email_booking_confirmation
       FROM availability_slots s 
       JOIN users u ON s.instructor_id = u.id
       WHERE s.id = $1
@@ -178,8 +179,11 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
     // Remove student from waitlist if they were on it
     await pool.query('DELETE FROM waitlist WHERE slot_id = $1 AND student_id = $2', [slot_id, req.user.userId]);
     
-    // Get student info
-    const studentResult = await pool.query('SELECT first_name, last_name, email FROM users WHERE id = $1', [req.user.userId]);
+    // Get student info INCLUDING email preferences
+    const studentResult = await pool.query(
+      'SELECT first_name, last_name, email, email_booking_confirmation FROM users WHERE id = $1', 
+      [req.user.userId]
+    );
     const student = studentResult.rows[0];
     
     const formattedDate = new Date(slot.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -200,52 +204,56 @@ router.post('/book', authenticateToken, authorize('student', 'admin'), async (re
       `Your appointment with ${slot.first_name} ${slot.last_name} on ${formattedDate} at ${slot.start_time} has been confirmed.`
     );
     
-    // EMAIL: Send confirmation to student
-    await sendEmail(
-      student.email,
-      '✅ Appointment Confirmed - Office Hours',
-      `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #1e3a5f;">Appointment Confirmed!</h2>
-          <p>Hi ${student.first_name},</p>
-          <p>Your appointment has been successfully booked.</p>
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
-            <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${slot.start_time} - ${slot.end_time}</p>
-            <p style="margin: 5px 0;"><strong>👨‍🏫 Instructor:</strong> ${slot.first_name} ${slot.last_name}</p>
-            <p style="margin: 5px 0;"><strong>📍 Location:</strong> ${slot.location || 'TBD'}</p>
-            ${topic ? `<p style="margin: 5px 0;"><strong>📝 Topic:</strong> ${topic}</p>` : ''}
+    // EMAIL: Send confirmation to student (if preference allows)
+    if (student.email_booking_confirmation !== false) {
+      await sendEmail(
+        student.email,
+        '✅ Appointment Confirmed - Office Hours',
+        `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1e3a5f;">Appointment Confirmed!</h2>
+            <p>Hi ${student.first_name},</p>
+            <p>Your appointment has been successfully booked.</p>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+              <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${slot.start_time} - ${slot.end_time}</p>
+              <p style="margin: 5px 0;"><strong>👨‍🏫 Instructor:</strong> ${slot.first_name} ${slot.last_name}</p>
+              <p style="margin: 5px 0;"><strong>📍 Location:</strong> ${slot.location || 'TBD'}</p>
+              ${topic ? `<p style="margin: 5px 0;"><strong>📝 Topic:</strong> ${topic}</p>` : ''}
+            </div>
+            <p>Need to make changes? <a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/my-appointments">Manage your appointments</a></p>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
           </div>
-          <p>Need to make changes? <a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/my-appointments">Manage your appointments</a></p>
-          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
-          <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
-        </div>
-      `
-    );
+        `
+      );
+    }
     
-    // EMAIL: Send notification to instructor
-    await sendEmail(
-      slot.instructor_email,
-      '📅 New Appointment Booked - Office Hours',
-      `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #1e3a5f;">New Appointment</h2>
-          <p>Hi ${slot.first_name},</p>
-          <p>A student has booked an appointment with you.</p>
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>👤 Student:</strong> ${student.first_name} ${student.last_name}</p>
-            <p style="margin: 5px 0;"><strong>📧 Email:</strong> ${student.email}</p>
-            <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
-            <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${slot.start_time} - ${slot.end_time}</p>
-            <p style="margin: 5px 0;"><strong>📍 Location:</strong> ${slot.location || 'TBD'}</p>
-            ${topic ? `<p style="margin: 5px 0;"><strong>📝 Topic:</strong> ${topic}</p>` : ''}
+    // EMAIL: Send notification to instructor (if preference allows)
+    if (slot.instructor_email_booking_confirmation !== false) {
+      await sendEmail(
+        slot.instructor_email,
+        '📅 New Appointment Booked - Office Hours',
+        `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1e3a5f;">New Appointment</h2>
+            <p>Hi ${slot.first_name},</p>
+            <p>A student has booked an appointment with you.</p>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>👤 Student:</strong> ${student.first_name} ${student.last_name}</p>
+              <p style="margin: 5px 0;"><strong>📧 Email:</strong> ${student.email}</p>
+              <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+              <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${slot.start_time} - ${slot.end_time}</p>
+              <p style="margin: 5px 0;"><strong>📍 Location:</strong> ${slot.location || 'TBD'}</p>
+              ${topic ? `<p style="margin: 5px 0;"><strong>📝 Topic:</strong> ${topic}</p>` : ''}
+            </div>
+            <p><a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/my-appointments">View all appointments</a></p>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
           </div>
-          <p><a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/my-appointments">View all appointments</a></p>
-          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
-          <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
-        </div>
-      `
-    );
+        `
+      );
+    }
     
     await logAction(req.user.userId, 'APPOINTMENT_BOOKED', { appointment_id: appointmentId, instructor_id: slot.instructor_id, date: slot.date }, req);
     
@@ -261,11 +269,13 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
   try {
     const { reason } = req.body;
     
-    // Get appointment details
+    // Get appointment details INCLUDING email preferences
     const aptResult = await pool.query(`
       SELECT a.*, 
         i.first_name as instructor_first_name, i.last_name as instructor_last_name, i.email as instructor_email,
-        s.first_name as student_first_name, s.last_name as student_last_name, s.email as student_email
+        i.email_cancellation as instructor_email_cancellation,
+        s.first_name as student_first_name, s.last_name as student_last_name, s.email as student_email,
+        s.email_cancellation as student_email_cancellation
       FROM appointments a
       JOIN users i ON a.instructor_id = i.id
       JOIN users s ON a.student_id = s.id
@@ -301,27 +311,29 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
         `${apt.student_first_name} ${apt.student_last_name} cancelled their appointment on ${formattedDate} at ${apt.start_time}.`
       );
       
-      // EMAIL to instructor
-      await sendEmail(
-        apt.instructor_email,
-        '❌ Appointment Cancelled - Office Hours',
-        `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #dc3545;">Appointment Cancelled</h2>
-            <p>Hi ${apt.instructor_first_name},</p>
-            <p>An appointment has been cancelled by the student.</p>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>👤 Student:</strong> ${apt.student_first_name} ${apt.student_last_name}</p>
-              <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
-              <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${apt.start_time} - ${apt.end_time}</p>
-              ${reason ? `<p style="margin: 5px 0;"><strong>📝 Reason:</strong> ${reason}</p>` : ''}
+      // EMAIL to instructor (if preference allows)
+      if (apt.instructor_email_cancellation !== false) {
+        await sendEmail(
+          apt.instructor_email,
+          '❌ Appointment Cancelled - Office Hours',
+          `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #dc3545;">Appointment Cancelled</h2>
+              <p>Hi ${apt.instructor_first_name},</p>
+              <p>An appointment has been cancelled by the student.</p>
+              <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>👤 Student:</strong> ${apt.student_first_name} ${apt.student_last_name}</p>
+                <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+                <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${apt.start_time} - ${apt.end_time}</p>
+                ${reason ? `<p style="margin: 5px 0;"><strong>📝 Reason:</strong> ${reason}</p>` : ''}
+              </div>
+              <p>This time slot is now available for other students to book.</p>
+              <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+              <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
             </div>
-            <p>This time slot is now available for other students to book.</p>
-            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
-          </div>
-        `
-      );
+          `
+        );
+      }
     } else {
       await createNotification(
         apt.student_id,
@@ -330,27 +342,29 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
         `${apt.instructor_first_name} ${apt.instructor_last_name} cancelled your appointment on ${formattedDate} at ${apt.start_time}.`
       );
       
-      // EMAIL to student
-      await sendEmail(
-        apt.student_email,
-        '❌ Appointment Cancelled - Office Hours',
-        `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #dc3545;">Appointment Cancelled</h2>
-            <p>Hi ${apt.student_first_name},</p>
-            <p>Your appointment has been cancelled by the instructor.</p>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>👨‍🏫 Instructor:</strong> ${apt.instructor_first_name} ${apt.instructor_last_name}</p>
-              <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
-              <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${apt.start_time} - ${apt.end_time}</p>
-              ${reason ? `<p style="margin: 5px 0;"><strong>📝 Reason:</strong> ${reason}</p>` : ''}
+      // EMAIL to student (if preference allows)
+      if (apt.student_email_cancellation !== false) {
+        await sendEmail(
+          apt.student_email,
+          '❌ Appointment Cancelled - Office Hours',
+          `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #dc3545;">Appointment Cancelled</h2>
+              <p>Hi ${apt.student_first_name},</p>
+              <p>Your appointment has been cancelled by the instructor.</p>
+              <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>👨‍🏫 Instructor:</strong> ${apt.instructor_first_name} ${apt.instructor_last_name}</p>
+                <p style="margin: 5px 0;"><strong>📅 Date:</strong> ${formattedDate}</p>
+                <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${apt.start_time} - ${apt.end_time}</p>
+                ${reason ? `<p style="margin: 5px 0;"><strong>📝 Reason:</strong> ${reason}</p>` : ''}
+              </div>
+              <p><a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/book">Book another appointment</a></p>
+              <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+              <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
             </div>
-            <p><a href="${process.env.FRONTEND_URL || 'https://officehourscs370.online'}/book">Book another appointment</a></p>
-            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #888; font-size: 12px;">Office Hours Booking Platform</p>
-          </div>
-        `
-      );
+          `
+        );
+      }
     }
     
     // NOTIFY WAITLIST
