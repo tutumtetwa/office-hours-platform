@@ -601,5 +601,34 @@ router.post('/logout', authenticateToken, async (req, res) => {
   }
 });
 
+// Delete own account
+router.delete('/account', authenticateToken, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Password is required to delete your account' });
+
+    const result = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.userId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const valid = await bcrypt.compare(password, result.rows[0].password);
+    if (!valid) return res.status(401).json({ error: 'Incorrect password' });
+
+    const id = req.user.userId;
+    await pool.query('DELETE FROM notifications WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM waitlist WHERE student_id = $1', [id]);
+    await pool.query('DELETE FROM sessions WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM email_verifications WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM password_resets WHERE user_id = $1', [id]);
+    await pool.query("UPDATE appointments SET status = 'cancelled', cancellation_reason = 'Account deleted' WHERE student_id = $1 OR instructor_id = $1", [id]);
+    await pool.query('DELETE FROM availability_slots WHERE instructor_id = $1', [id]);
+    await pool.query('DELETE FROM recurring_patterns WHERE instructor_id = $1', [id]);
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    res.json({ message: 'Account deleted' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 module.exports = router;
 module.exports.sendWelcomeEmail = sendWelcomeEmail;

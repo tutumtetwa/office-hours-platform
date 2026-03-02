@@ -42,7 +42,8 @@ export const authAPI = {
   updatePassword: (currentPassword, newPassword) => api.put('/auth/password', { current_password: currentPassword, new_password: newPassword }),
   verifyEmail: (verificationToken, code) => api.post('/auth/verify-email', { verification_token: verificationToken, code }),
   resendVerification: (verificationToken) => api.post('/auth/resend-verification', { verification_token: verificationToken }),
-  setupPassword: (setupToken, newPassword) => api.post('/auth/setup-password', { setup_token: setupToken, new_password: newPassword })
+  setupPassword: (setupToken, newPassword) => api.post('/auth/setup-password', { setup_token: setupToken, new_password: newPassword }),
+  deleteAccount: (password) => api.delete('/auth/account', { data: { password } })
 };
 
 export const slotsAPI = {
@@ -100,6 +101,7 @@ export const adminAPI = {
   deactivateUser: (id) => api.post(`/admin/users/${id}/deactivate`),
   reactivateUser: (id) => api.post(`/admin/users/${id}/reactivate`),
   resendInvite: (id) => api.post(`/admin/users/${id}/resend-invite`),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
   getAuditLogs: (params) => api.get('/admin/audit-logs', { params }),
   getStats: () => api.get('/admin/stats'),
   getDepartments: () => api.get('/admin/departments')

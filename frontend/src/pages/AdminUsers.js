@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useUsers } from '../hooks/useData';
 import { adminAPI } from '../utils/api';
-import { Users, Plus, Edit2, UserX, UserCheck, Copy, Check, Mail, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Plus, Edit2, UserX, UserCheck, Copy, Check, Mail, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import {
   PageHeader, Card, Spinner, Modal, FormInput, FormSelect,
   Alert, RoleBadge, EmptyState
@@ -15,6 +15,7 @@ const AdminUsers = () => {
 
   const [createModal, setCreateModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [formData, setFormData] = useState({
     email: '', first_name: '', last_name: '', role: 'student', department: ''
@@ -124,6 +125,21 @@ const AdminUsers = () => {
     }
   };
 
+  const handleDeleteUser = async () => {
+    setActionLoading(true);
+    try {
+      await adminAPI.deleteUser(selectedUser.id);
+      setSuccess(`${selectedUser.first_name} ${selectedUser.last_name}'s account has been permanently deleted`);
+      setDeleteModal(false);
+      refetch();
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete user');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleSearchChange = (e) => {
     setFilters({ ...filters, search: e.target.value });
     setPage(1);
@@ -197,11 +213,11 @@ const AdminUsers = () => {
                       <tr key={user.id}>
                         <td>
                           <strong>{user.first_name} {user.last_name}</strong>
-                          {user.must_change_password ? (
+                          {user.must_change_password === 1 && (
                             <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', background: 'var(--color-warning-bg)', color: 'var(--color-warning)', borderRadius: '4px', padding: '1px 6px' }}>
                               Setup Pending
                             </span>
-                          ) : null}
+                          )}
                         </td>
                         <td>{user.email}</td>
                         <td><RoleBadge role={user.role} /></td>
@@ -219,7 +235,7 @@ const AdminUsers = () => {
                             <button className="btn btn-ghost btn-sm" onClick={() => openEditModal(user)} title="Edit user">
                               <Edit2 size={14} />
                             </button>
-                            {user.must_change_password && (
+                            {user.must_change_password === 1 && (
                               <button
                                 className="btn btn-ghost btn-sm"
                                 onClick={() => handleResendInvite(user)}
@@ -232,10 +248,18 @@ const AdminUsers = () => {
                             <button
                               className="btn btn-ghost btn-sm"
                               onClick={() => handleToggleActive(user)}
-                              style={{ color: user.is_active ? 'var(--color-error)' : 'var(--color-success)' }}
+                              style={{ color: user.is_active ? 'var(--color-warning)' : 'var(--color-success)' }}
                               title={user.is_active ? 'Deactivate' : 'Reactivate'}
                             >
                               {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => { setSelectedUser(user); setDeleteModal(true); }}
+                              style={{ color: 'var(--color-error)' }}
+                              title="Delete account permanently"
+                            >
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </td>
@@ -370,6 +394,36 @@ const AdminUsers = () => {
               <FormInput label="Department" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} />
             </div>
           </>
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModal}
+        onClose={() => setDeleteModal(false)}
+        title="Delete Account"
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setDeleteModal(false)} disabled={actionLoading}>Cancel</button>
+            <button className="btn btn-danger" onClick={handleDeleteUser} disabled={actionLoading}>
+              {actionLoading ? <Spinner size={18} /> : 'Delete Permanently'}
+            </button>
+          </>
+        }
+      >
+        {selectedUser && (
+          <div>
+            <p style={{ marginBottom: 'var(--space-md)' }}>
+              Are you sure you want to permanently delete this account? This cannot be undone.
+            </p>
+            <div style={{ background: 'var(--color-error-bg, #fef2f2)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius-md)', padding: 'var(--space-md)' }}>
+              <strong style={{ color: 'var(--color-error)' }}>{selectedUser.first_name} {selectedUser.last_name}</strong>
+              <div style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>{selectedUser.email}</div>
+            </div>
+            <p style={{ marginTop: 'var(--space-md)', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+              All their appointments, availability slots, and data will be permanently removed.
+            </p>
+          </div>
         )}
       </Modal>
 

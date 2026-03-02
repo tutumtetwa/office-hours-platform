@@ -27,18 +27,24 @@ async function logAction(userId, action, details = {}, req = null) {
   }
 }
 
-// Get all users (with optional pagination and search)
+// Get all users (with optional pagination, search, and role filter)
 router.get('/users', authenticateToken, authorize('admin'), async (req, res) => {
   try {
-    const { page = 1, limit = 20, search = '' } = req.query;
+    const { page = 1, limit = 20, search = '', role = '' } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const params = [];
-    let whereClause = '';
+    const conditions = [];
 
     if (search) {
       params.push(`%${search}%`);
-      whereClause = `WHERE (email ILIKE $1 OR first_name ILIKE $1 OR last_name ILIKE $1 OR department ILIKE $1)`;
+      conditions.push(`(email ILIKE $${params.length} OR first_name ILIKE $${params.length} OR last_name ILIKE $${params.length} OR department ILIKE $${params.length})`);
     }
+    if (role) {
+      params.push(role);
+      conditions.push(`role = $${params.length}`);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countResult = await pool.query(
       `SELECT COUNT(*)::int as total FROM users ${whereClause}`,
@@ -209,6 +215,31 @@ router.post('/users/:id/reactivate', authenticateToken, authorize('admin'), asyn
     res.json({ message: 'User reactivated' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to reactivate user' });
+  }
+});
+
+// Delete user (permanently)
+router.delete('/users/:id', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (id === req.user.userId) {
+      return res.status(400).json({ error: 'You cannot delete your own account from here' });
+    }
+    // Clean up related data to avoid FK constraint violations
+    await pool.query('DELETE FROM notifications WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM waitlist WHERE student_id = $1', [id]);
+    await pool.query('DELETE FROM sessions WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM email_verifications WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM password_resets WHERE user_id = $1', [id]);
+    await pool.query("UPDATE appointments SET status = 'cancelled', cancellation_reason = 'Account deleted' WHERE student_id = $1 OR instructor_id = $1", [id]);
+    await pool.query('DELETE FROM availability_slots WHERE instructor_id = $1', [id]);
+    await pool.query('DELETE FROM recurring_patterns WHERE instructor_id = $1', [id]);
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    await logAction(req.user.userId, 'USER_DELETED', { deleted_user_id: id }, req);
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user: ' + error.message });
   }
 });
 
