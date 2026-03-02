@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2d5a8a"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e0b83a"/>
+      <stop offset="100%" stop-color="#c9a227"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="64" height="64" rx="13" fill="url(#bg)"/>
+
+  <!-- Subtle inner highlight -->
+  <rect x="1" y="1" width="62" height="30" rx="12" fill="white" opacity="0.06"/>
+
+  <!-- Graduation cap: flat top diamond -->
+  <polygon points="32,11 54,22 32,33 10,22" fill="url(#gold)" filter="url(#shadow)"/>
+
+  <!-- Cap highlight shimmer -->
+  <polygon points="32,11 54,22 43,27.5 21,16.5" fill="white" opacity="0.12"/>
+
+  <!-- Cap brim / body (trapezoid) -->
+  <path d="M21 27 L21 39 C21 43 26 47 32 47 C38 47 43 43 43 39 L43 27" fill="url(#gold)" filter="url(#shadow)"/>
+
+  <!-- Cap body highlight -->
+  <path d="M21 27 L21 32 C24 34 28 35 32 35 C36 35 40 34 43 32 L43 27 L32 33 Z" fill="white" opacity="0.1"/>
+
+  <!-- Tassel rope -->
+  <line x1="54" y1="22" x2="54" y2="38" stroke="#c9a227" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Tassel knot -->
+  <circle cx="54" cy="38" r="3" fill="url(#gold)"/>
+
+  <!-- Tassel fringe lines -->
+  <line x1="51" y1="41" x2="50" y2="46" stroke="#c9a227" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="54" y1="41" x2="54" y2="47" stroke="#c9a227" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="57" y1="41" x2="58" y2="46" stroke="#c9a227" stroke-width="1.8" stroke-linecap="round"/>
+</svg>
