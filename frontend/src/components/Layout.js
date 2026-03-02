@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { 
   Calendar, Clock, Users, Settings, LogOut, LayoutDashboard,
-  CalendarPlus, History, FileText, Menu, X, GraduationCap, Repeat, ListOrdered, Bell
+  CalendarPlus, History, FileText, Menu, X, GraduationCap, Repeat, ListOrdered, Bell, Moon, Sun
 } from 'lucide-react';
 import { Avatar } from './UI';
 
 const Layout = ({ children }) => {
   const { user, logout, isStudent, isInstructor, isAdmin } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -104,8 +106,16 @@ const Layout = ({ children }) => {
               <span>Office Hours</span>
             </div>
             
-            {/* Notifications Bell */}
-            <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {/* Dark Mode Toggle */}
+              <button onClick={toggleDarkMode} style={{
+                background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', padding: '8px',
+                cursor: 'pointer', color: 'white', display: 'flex'
+              }} title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+
+              {/* Notifications Bell */}
               <button onClick={() => setNotificationsOpen(!notificationsOpen)} style={{
                 background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', padding: '8px',
                 cursor: 'pointer', position: 'relative', color: 'white', display: 'flex'
@@ -174,11 +184,12 @@ const Layout = ({ children }) => {
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setNotificationsOpen(false)} />
           <div style={{
-            position: 'fixed', top: '10px', left: '220px', width: '360px', background: 'white',
+            position: 'fixed', top: '10px', left: '220px', width: '360px', 
+            background: darkMode ? '#1f2937' : 'white',
             borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', zIndex: 999, overflow: 'hidden'
           }}>
-            <div style={{ padding: '16px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <strong style={{ color: '#1e3a5f' }}>Notifications</strong>
+            <div style={{ padding: '16px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong style={{ color: darkMode ? '#f9fafb' : '#1e3a5f' }}>Notifications</strong>
               {unreadCount > 0 && (
                 <button onClick={markAllAsRead} style={{ background: 'none', border: 'none', color: '#2d5a8a', fontSize: '13px', cursor: 'pointer' }}>
                   Mark all read
@@ -187,18 +198,18 @@ const Layout = ({ children }) => {
             </div>
             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
               {notifications.length === 0 ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>No notifications</div>
+                <div style={{ padding: '32px', textAlign: 'center', color: darkMode ? '#9ca3af' : '#888' }}>No notifications</div>
               ) : (
                 notifications.map(n => (
                   <div key={n.id} style={{
-                    padding: '12px 16px', borderBottom: '1px solid #f0f0f0',
-                    background: n.is_read ? 'white' : '#f8f6f3', display: 'flex', gap: '12px'
+                    padding: '12px 16px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f0f0f0',
+                    background: n.is_read ? (darkMode ? '#1f2937' : 'white') : (darkMode ? '#374151' : '#f8f6f3'), display: 'flex', gap: '12px'
                   }}>
                     <span style={{ fontSize: '20px' }}>{getIcon(n.type)}</span>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: n.is_read ? 'normal' : '600', color: '#1e3a5f', fontSize: '14px' }}>{n.title}</div>
-                      <div style={{ color: '#666', fontSize: '13px', marginTop: '2px' }}>{n.message}</div>
-                      <div style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>{formatTime(n.created_at)}</div>
+                      <div style={{ fontWeight: n.is_read ? 'normal' : '600', color: darkMode ? '#f9fafb' : '#1e3a5f', fontSize: '14px' }}>{n.title}</div>
+                      <div style={{ color: darkMode ? '#9ca3af' : '#666', fontSize: '13px', marginTop: '2px' }}>{n.message}</div>
+                      <div style={{ color: darkMode ? '#6b7280' : '#999', fontSize: '12px', marginTop: '4px' }}>{formatTime(n.created_at)}</div>
                     </div>
                     {!n.is_read && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#c9a227', marginTop: '6px' }} />}
                   </div>
