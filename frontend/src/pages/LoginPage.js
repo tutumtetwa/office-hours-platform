@@ -156,6 +156,39 @@ const LoginPage = () => {
               Sign up
             </Link>
           </p>
+
+          {/* Demo credentials */}
+          <div style={{
+            marginTop: '1.75rem',
+            padding: '1rem',
+            background: darkMode ? 'rgba(255,255,255,0.05)' : 'var(--color-info-bg)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid rgba(30,58,95,0.12)'
+          }}>
+            <p style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: '0.6rem' }}>
+              Demo Accounts
+            </p>
+            {[
+              { role: 'Admin', email: 'admin@university.edu', pass: 'admin123' },
+              { role: 'Instructor', email: 'prof.smith@university.edu', pass: 'instructor123' },
+              { role: 'Student', email: 'student@university.edu', pass: 'student123' },
+            ].map(({ role, email, pass }) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => setFormData({ email, password: pass })}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '0.3rem 0', textAlign: 'left', gap: '0.5rem'
+                }}
+              >
+                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', minWidth: '64px' }}>{role}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontFamily: 'monospace', flex: 1 }}>{email}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>{pass}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

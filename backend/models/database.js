@@ -73,15 +73,7 @@ async function initializeDatabase() {
       END $$;
     `);
 
-    // Set email_verified = 1 for pre-existing users (no pending verification entry)
-    // so they aren't locked out after the migration. Safe to run multiple times.
-    await pool.query(`
-      UPDATE users SET email_verified = 1
-      WHERE (email_verified IS NULL OR email_verified = 0)
-      AND NOT EXISTS (SELECT 1 FROM email_verifications WHERE user_id = users.id)
-    `);
-
-    // Create email_verifications table
+    // Create email_verifications table FIRST (UPDATE below references it)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS email_verifications (
         id VARCHAR(255) PRIMARY KEY,
@@ -91,6 +83,14 @@ async function initializeDatabase() {
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // Set email_verified = 1 for pre-existing users (no pending verification entry)
+    // so they aren't locked out after the migration. Safe to run multiple times.
+    await pool.query(`
+      UPDATE users SET email_verified = 1
+      WHERE (email_verified IS NULL OR email_verified = 0)
+      AND NOT EXISTS (SELECT 1 FROM email_verifications WHERE user_id = users.id)
     `);
 
     // Create password_resets table
