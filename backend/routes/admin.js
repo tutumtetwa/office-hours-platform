@@ -1,0 +1,344 @@
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const { pool } = require('../models/database');
+const { authenticateToken, authorize } = require('../middleware/auth');
+const { sendWelcomeEmail } = require('./auth');
+
+const router = express.Router();
+
+// Helper to log actions
+async function logAction(userId, action, details = {}, req = null) {
+  try {
+    await pool.query(
+      'INSERT INTO audit_logs (id, user_id, action, details, ip_address, user_agent, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+      [
+        uuidv4(),
+        userId,
+        action,
+        JSON.stringify(details),
+        req?.ip || req?.headers?.['x-forwarded-for'] || 'unknown',
+        req?.headers?.['user-agent']?.substring(0, 200) || 'unknown'
+      ]
+    );
+  } catch (e) {
+    console.error('Failed to log action:', e);
+  }
+}
+
+// Get all users (with optional pagination, search, and role filter)
+router.get('/users', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search = '', role = '' } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const params = [];
+    const conditions = [];
+
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(email ILIKE $${params.length} OR first_name ILIKE $${params.length} OR last_name ILIKE $${params.length} OR department ILIKE $${params.length})`);
+    }
+    if (role) {
+      params.push(role);
+      conditions.push(`role = $${params.length}`);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int as total FROM users ${whereClause}`,
+      params
+    );
+    const total = countResult.rows[0].total;
+
+    params.push(parseInt(limit));
+    params.push(offset);
+    const result = await pool.query(
+      `SELECT id, email, first_name, last_name, role, department, is_active, must_change_password, created_at, last_login
+       FROM users ${whereClause} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    res.json({
+      users: result.rows,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+function generateTempPassword() {
+  return crypto.randomBytes(6).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 8);
+}
+
+// Create user
+router.post('/users', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const { email, first_name, last_name, role, department } = req.body;
+
+    if (!email || !first_name || !last_name) {
+      return res.status(400).json({ error: 'Email, first name, and last name are required' });
+    }
+
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Email already exists' });
+    }
+
+    const tempPassword = generateTempPassword();
+    const hashedPassword = bcrypt.hashSync(tempPassword, 10);
+    const userId = uuidv4();
+
+    await pool.query(
+      `INSERT INTO users (id, email, password, first_name, last_name, role, department, is_active, email_verified, must_change_password, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 0, 1, NOW(), NOW())`,
+      [userId, email.toLowerCase(), hashedPassword, first_name, last_name, role || 'student', department || null]
+    );
+
+    // Create setup token in password_resets (temp_token = 'setup' marker)
+    const setupToken = crypto.randomBytes(32).toString('hex');
+    await pool.query(
+      `INSERT INTO password_resets (id, user_id, temp_token, reset_token, expires_at, created_at)
+       VALUES ($1, $2, 'setup', $3, NOW() + INTERVAL '7 days', NOW())`,
+      [uuidv4(), userId, setupToken]
+    );
+
+    // Send welcome email with temp credentials
+    await sendWelcomeEmail(email.toLowerCase(), first_name, tempPassword);
+
+    await logAction(req.user.id, 'USER_CREATED', { created_user_id: userId, email, role }, req);
+
+    res.status(201).json({
+      message: 'User created',
+      user: { id: userId, email: email.toLowerCase(), first_name, last_name, role: role || 'student' },
+      temp_password: tempPassword
+    });
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Resend invite (for admin-created users who haven't set their password)
+router.post('/users/:id/resend-invite', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const userResult = await pool.query(
+      'SELECT id, email, first_name, must_change_password FROM users WHERE id = $1',
+      [req.params.id]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const user = userResult.rows[0];
+    if (!user.must_change_password) {
+      return res.status(400).json({ error: 'This user has already set up their account' });
+    }
+
+    // Generate fresh temp password and setup token
+    const tempPassword = generateTempPassword();
+    const hashedPassword = bcrypt.hashSync(tempPassword, 10);
+    const setupToken = crypto.randomBytes(32).toString('hex');
+
+    await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, user.id]);
+    await pool.query('DELETE FROM password_resets WHERE user_id = $1', [user.id]);
+    await pool.query(
+      `INSERT INTO password_resets (id, user_id, temp_token, reset_token, expires_at, created_at)
+       VALUES ($1, $2, 'setup', $3, NOW() + INTERVAL '7 days', NOW())`,
+      [uuidv4(), user.id, setupToken]
+    );
+
+    await sendWelcomeEmail(user.email, user.first_name, tempPassword);
+    await logAction(req.user.id, 'USER_INVITE_RESENT', { target_user_id: user.id }, req);
+
+    res.json({ message: 'Invite resent successfully', temp_password: tempPassword });
+  } catch (error) {
+    console.error('Resend invite error:', error);
+    res.status(500).json({ error: 'Failed to resend invite' });
+  }
+});
+
+// Get single user
+router.get('/users/:id', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name, role, department, is_active, last_login FROM users WHERE id = $1',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ user: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// Update user
+router.put('/users/:id', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const { first_name, last_name, role, department } = req.body;
+    await pool.query(
+      'UPDATE users SET first_name = $1, last_name = $2, role = $3, department = $4, updated_at = NOW() WHERE id = $5',
+      [first_name, last_name, role, department, req.params.id]
+    );
+    await logAction(req.user.id, 'USER_UPDATED', { updated_user_id: req.params.id, first_name, last_name, role }, req);
+    res.json({ message: 'User updated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Deactivate user
+router.post('/users/:id/deactivate', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET is_active = 0, updated_at = NOW() WHERE id = $1', [req.params.id]);
+    await logAction(req.user.id, 'USER_DEACTIVATED', { deactivated_user_id: req.params.id }, req);
+    res.json({ message: 'User deactivated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to deactivate user' });
+  }
+});
+
+// Reactivate user
+router.post('/users/:id/reactivate', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET is_active = 1, updated_at = NOW() WHERE id = $1', [req.params.id]);
+    await logAction(req.user.id, 'USER_REACTIVATED', { reactivated_user_id: req.params.id }, req);
+    res.json({ message: 'User reactivated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reactivate user' });
+  }
+});
+
+// Delete user (permanently)
+router.delete('/users/:id', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (id === req.user.userId) {
+      return res.status(400).json({ error: 'You cannot delete your own account from here' });
+    }
+    // Clean up related data to avoid FK constraint violations
+    await pool.query('DELETE FROM notifications WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM waitlist WHERE student_id = $1', [id]);
+    await pool.query('DELETE FROM sessions WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM email_verifications WHERE user_id = $1', [id]);
+    await pool.query('DELETE FROM password_resets WHERE user_id = $1', [id]);
+    await pool.query("UPDATE appointments SET status = 'cancelled', cancellation_reason = 'Account deleted' WHERE student_id = $1 OR instructor_id = $1", [id]);
+    await pool.query('DELETE FROM availability_slots WHERE instructor_id = $1', [id]);
+    await pool.query('DELETE FROM recurring_patterns WHERE instructor_id = $1', [id]);
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    await logAction(req.user.userId, 'USER_DELETED', { deleted_user_id: id }, req);
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user: ' + error.message });
+  }
+});
+
+// Get stats
+router.get('/stats', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const totalUsers = await pool.query('SELECT COUNT(*)::int as count FROM users');
+    const students = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE role = 'student'");
+    const instructors = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE role = 'instructor'");
+    const admins = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE role = 'admin'");
+    const activeUsers = await pool.query("SELECT COUNT(*)::int as count FROM users WHERE is_active = 1");
+    const totalAppointments = await pool.query('SELECT COUNT(*)::int as count FROM appointments');
+    const completedAppointments = await pool.query("SELECT COUNT(*)::int as count FROM appointments WHERE status = 'completed'");
+    const cancelledAppointments = await pool.query("SELECT COUNT(*)::int as count FROM appointments WHERE status = 'cancelled'");
+    
+    res.json({
+      total_users: totalUsers.rows[0].count,
+      total_students: students.rows[0].count,
+      total_instructors: instructors.rows[0].count,
+      total_admins: admins.rows[0].count,
+      active_users: activeUsers.rows[0].count,
+      total_appointments: totalAppointments.rows[0].count,
+      completed_appointments: completedAppointments.rows[0].count,
+      cancelled_appointments: cancelledAppointments.rows[0].count,
+      totalUsers: totalUsers.rows[0].count,
+      students: students.rows[0].count,
+      instructors: instructors.rows[0].count,
+      admins: admins.rows[0].count,
+      activeUsers: activeUsers.rows[0].count,
+      appointments: totalAppointments.rows[0].count,
+      completed: completedAppointments.rows[0].count,
+      cancelled: cancelledAppointments.rows[0].count
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// Get audit logs - FIXED to show user names properly
+router.get('/audit-logs', authenticateToken, authorize('admin'), async (req, res) => {
+  try {
+    const { action, limit = 100 } = req.query;
+    
+    let query = `
+      SELECT 
+        al.id,
+        al.action,
+        al.details,
+        al.ip_address,
+        al.created_at,
+        al.user_id,
+        COALESCE(u.first_name || ' ' || u.last_name, 'System') as user_name,
+        COALESCE(u.email, 'system') as user_email
+      FROM audit_logs al 
+      LEFT JOIN users u ON al.user_id = u.id 
+    `;
+    
+    const params = [];
+    if (action && action !== 'All Actions') {
+      params.push(action);
+      query += ` WHERE al.action = $${params.length}`;
+    }
+    
+    params.push(parseInt(limit) || 100);
+    query += ` ORDER BY al.created_at DESC LIMIT $${params.length}`;
+    
+    const result = await pool.query(query, params);
+    
+    const logs = result.rows.map(log => ({
+      id: log.id,
+      action: log.action,
+      details: log.details,
+      ip_address: log.ip_address,
+      created_at: log.created_at,
+      user_id: log.user_id,
+      user_name: log.user_name,
+      user_email: log.user_email,
+      // For frontend compatibility
+      first_name: log.user_name?.split(' ')[0],
+      last_name: log.user_name?.split(' ')[1],
+      email: log.user_email
+    }));
+    
+    res.json({ logs });
+  } catch (error) {
+    console.error('Get audit logs error:', error);
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+// Get departments
+router.get('/departments', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT DISTINCT department FROM users WHERE department IS NOT NULL');
+    res.json({ departments: result.rows.map(r => r.department) });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch departments' });
+  }
+});
+
+module.exports = router;
