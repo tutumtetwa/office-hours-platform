@@ -2,7 +2,7 @@
 
 A full-stack web application for scheduling academic office hours appointments between students and instructors.
 
-🌐 **Live at [officehourscs370.online](https://officehourscs370.online)** — no installation required.
+🌐 **Live at [officehourscs370.online](https://officehourscs370.online)**  no installation required.
 
 ![Node.js](https://img.shields.io/badge/Node.js-18+-green)
 ![React](https://img.shields.io/badge/React-18-blue)
