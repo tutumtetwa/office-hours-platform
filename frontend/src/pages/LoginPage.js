@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff, CheckCircle, Presentation } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { Alert, Spinner } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -191,7 +191,7 @@ const LoginPage = () => {
           </div>
 
           <a
-            href="/presentation.html"
+            href="/slides"
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -210,7 +210,7 @@ const LoginPage = () => {
             onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
             onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
-            <Presentation size={18} color="#f0c842" />
+            <span style={{ fontSize: '1rem' }}>🎞️</span>
             <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 600 }}>Slides Presentation</span>
             <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>CS370 ↗</span>
           </a>

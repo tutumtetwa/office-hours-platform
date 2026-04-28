@@ -19,6 +19,7 @@ import AdminLogs from './pages/AdminLogs';
 import ForgotPassword from './pages/ForgotPassword';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import SetupPasswordPage from './pages/SetupPasswordPage';
+import PresentationPage from './pages/PresentationPage';
 
 // Components
 import Layout from './components/Layout';
@@ -90,6 +91,7 @@ function AppRoutes() {
         <PublicRoute><RegisterPage /></PublicRoute>
       } />
 
+      <Route path="/slides" element={<PresentationPage />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/verify-email" element={
         <PublicRoute><VerifyEmailPage /></PublicRoute>
