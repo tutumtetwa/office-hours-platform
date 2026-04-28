@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, CheckCircle, Presentation } from 'lucide-react';
 import { Alert, Spinner } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -189,6 +189,31 @@ const LoginPage = () => {
               </button>
             ))}
           </div>
+
+          <a
+            href="/presentation.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              marginTop: '1rem',
+              padding: '0.75rem 1rem',
+              background: 'linear-gradient(135deg, #1a3352 0%, #0f2239 100%)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid rgba(201,162,39,0.3)',
+              color: 'white',
+              textDecoration: 'none',
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            <Presentation size={18} color="#f0c842" />
+            <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 600 }}>Slides Presentation</span>
+            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>CS370 ↗</span>
+          </a>
         </div>
       </div>
     </div>
