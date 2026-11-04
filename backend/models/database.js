@@ -189,7 +189,7 @@ async function initializeDatabase() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'audit_logs' AND column_name = 'entity_id') THEN
           ALTER TABLE audit_logs ADD COLUMN entity_id VARCHAR(255);
         END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'recurring_patterns' AND column_name = 'slot_duration') THEN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'recurring_patterns') AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'recurring_patterns' AND column_name = 'slot_duration') THEN
           ALTER TABLE recurring_patterns ADD COLUMN slot_duration INTEGER DEFAULT 30;
         END IF;
       END $$;
@@ -245,8 +245,18 @@ async function initializeDatabase() {
 }
 
 async function createDemoUsers() {
+  // The admin account is never seeded with a public password in production.
+  // Set ADMIN_PASSWORD to keep a working admin login; otherwise it is disabled.
+  const isProd = process.env.NODE_ENV === 'production';
+  const adminPassword = process.env.ADMIN_PASSWORD || (isProd ? null : 'admin123');
+  if (!adminPassword) {
+    await pool.query("UPDATE users SET is_active = 0 WHERE email = 'admin@university.edu'");
+  } else if (process.env.ADMIN_PASSWORD) {
+    await pool.query('UPDATE users SET password = $1, is_active = 1 WHERE email = $2',
+      [bcrypt.hashSync(adminPassword, 12), 'admin@university.edu']);
+  }
   const users = [
-    { email: 'admin@university.edu', password: 'admin123', first_name: 'System', last_name: 'Administrator', role: 'admin', department: 'IT Services', phone_number: '5551234567' },
+    ...(adminPassword ? [{ email: 'admin@university.edu', password: adminPassword, first_name: 'System', last_name: 'Administrator', role: 'admin', department: 'IT Services', phone_number: '5551234567' }] : []),
     { email: 'prof.smith@university.edu', password: 'instructor123', first_name: 'Sarah', last_name: 'Smith', role: 'instructor', department: 'Computer Science', phone_number: '5552345678' },
     { email: 'prof.johnson@university.edu', password: 'instructor123', first_name: 'Michael', last_name: 'Johnson', role: 'instructor', department: 'Mathematics', phone_number: '5553456789' },
     { email: 'student@university.edu', password: 'student123', first_name: 'Alex', last_name: 'Student', role: 'student', department: 'Computer Science', phone_number: '5554567890' }

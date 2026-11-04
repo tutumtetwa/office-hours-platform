@@ -14,7 +14,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const APP_URL = process.env.APP_URL || 'https://officehourscs370.online';
 
 function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return require('crypto').randomInt(100000, 1000000).toString();
 }
 
 async function sendVerificationEmail(email, firstName, code) {

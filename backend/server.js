@@ -46,6 +46,10 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/password-reset/request', authLimiter);
 app.use('/api/password-reset/send-code', authLimiter);
 app.use('/api/auth/resend-verification', authLimiter);
+app.use('/api/auth/verify-email', authLimiter);
+app.use('/api/auth/setup-password', authLimiter);
+app.use('/api/password-reset/verify-code', authLimiter);
+app.use('/api/password-reset/reset', authLimiter);
 
 // Body parser
 app.use(express.json({ limit: '10mb' }));
@@ -96,7 +100,6 @@ initializeDatabase().then(() => {
 ╚══════════════════════════════════════════════════════════════╝
 
 Demo Credentials:
-  Admin:      admin@university.edu / admin123
   Instructor: prof.smith@university.edu / instructor123
   Student:    student@university.edu / student123
     `);

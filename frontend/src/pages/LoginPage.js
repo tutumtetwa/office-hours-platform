@@ -169,7 +169,6 @@ const LoginPage = () => {
               Demo Accounts
             </p>
             {[
-              { role: 'Admin', email: 'admin@university.edu', pass: 'admin123' },
               { role: 'Instructor', email: 'prof.smith@university.edu', pass: 'instructor123' },
               { role: 'Student', email: 'student@university.edu', pass: 'student123' },
             ].map(({ role, email, pass }) => (

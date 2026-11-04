@@ -12,7 +12,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 // Generate 6-digit code
 function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return require('crypto').randomInt(100000, 1000000).toString();
 }
 
 // Mask email for privacy

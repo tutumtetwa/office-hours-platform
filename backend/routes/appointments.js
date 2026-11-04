@@ -109,6 +109,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
     
     const a = result.rows[0];
+    if (a.student_id !== req.user.userId && a.instructor_id !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
     res.json({ 
       appointment: {
         id: a.id, date: a.date, start_time: a.start_time, end_time: a.end_time,
@@ -381,7 +384,12 @@ router.post('/:id/complete', authenticateToken, authorize('instructor', 'admin')
       return res.status(400).json({ error: 'Invalid status. Use "completed" or "no-show"' });
     }
     
-    await pool.query('UPDATE appointments SET status = $1, updated_at = NOW() WHERE id = $2', [status, req.params.id]);
+    const own = req.user.role === 'admin'
+      ? await pool.query('UPDATE appointments SET status = $1, updated_at = NOW() WHERE id = $2', [status, req.params.id])
+      : await pool.query('UPDATE appointments SET status = $1, updated_at = NOW() WHERE id = $2 AND instructor_id = $3', [status, req.params.id, req.user.userId]);
+    if (own.rowCount === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
     await logAction(req.user.userId, `APPOINTMENT_${status.toUpperCase().replace('-', '_')}`, { appointment_id: req.params.id }, req);
     
     res.json({ message: `Appointment marked as ${status}` });
@@ -394,10 +402,18 @@ router.post('/:id/complete', authenticateToken, authorize('instructor', 'admin')
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { topic, notes, meeting_link } = req.body;
-    await pool.query(
-      'UPDATE appointments SET topic = COALESCE($1, topic), notes = COALESCE($2, notes), meeting_link = COALESCE($3, meeting_link), updated_at = NOW() WHERE id = $4',
-      [topic, notes, meeting_link, req.params.id]
+    if (meeting_link && !/^https:\/\//i.test(meeting_link)) {
+      return res.status(400).json({ error: 'Meeting link must start with https://' });
+    }
+    const isAdmin = req.user.role === 'admin';
+    const upd = await pool.query(
+      `UPDATE appointments SET topic = COALESCE($1, topic), notes = COALESCE($2, notes), meeting_link = COALESCE($3, meeting_link), updated_at = NOW()
+       WHERE id = $4 AND ($5 OR student_id = $6 OR instructor_id = $6)`,
+      [topic, notes, meeting_link, req.params.id, isAdmin, req.user.userId]
     );
+    if (upd.rowCount === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
     res.json({ message: 'Appointment updated' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update appointment' });
