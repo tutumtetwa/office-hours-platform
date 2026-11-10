@@ -7,7 +7,7 @@ A full-stack web application for scheduling academic office hours appointments b
 ![Node.js](https://img.shields.io/badge/Node.js-18+-green)
 ![React](https://img.shields.io/badge/React-18-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue)
-![Deployed](https://img.shields.io/badge/deployed-Railway-blueviolet)
+![Deployed](https://img.shields.io/badge/deployed-Vercel-black)
 
 ---
 
@@ -15,11 +15,10 @@ A full-stack web application for scheduling academic office hours appointments b
 
 **[https://officehourscs370.online](https://officehourscs370.online)**
 
-Use the demo accounts below to explore all roles:
+Use the demo accounts below to explore the student and instructor roles (admin access is private):
 
 | Role | Email | Password |
 |------|-------|----------|
-| **Admin** | admin@university.edu | admin123 |
 | **Instructor** | prof.smith@university.edu | instructor123 |
 | **Instructor** | prof.johnson@university.edu | instructor123 |
 | **Student** | student@university.edu | student123 |
@@ -76,7 +75,7 @@ Or register your own account.
 | Database | PostgreSQL 15 |
 | Auth | JWT, bcryptjs |
 | Email | Resend |
-| Hosting | Railway (backend + DB), Railway (frontend) |
+| Hosting | Vercel (React frontend + Express API as a serverless function), Neon Postgres |
 
 ---
 

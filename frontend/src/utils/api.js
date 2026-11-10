@@ -2,10 +2,22 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-let authToken = null;
+// The token survives a page refresh (sessionStorage) but not closing the tab.
+const TOKEN_KEY = 'oh_token';
+const readStoredToken = () => {
+  try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+};
+
+let authToken = readStoredToken();
+
+export const getStoredToken = () => authToken;
 
 export const setAuthToken = (token) => {
   authToken = token;
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch { /* storage unavailable: keep in memory only */ }
 };
 
 const api = axios.create({
@@ -26,7 +38,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      authToken = null;
+      setAuthToken(null);
       window.location.href = '/login';
     }
     return Promise.reject(error);

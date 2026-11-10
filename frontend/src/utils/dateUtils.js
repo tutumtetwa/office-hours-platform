@@ -97,3 +97,6 @@ export const formatDuration = (minutes) => {
   const mins = minutes % 60;
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 };
+
+// Parse a plain YYYY-MM-DD date as local midnight (new Date('YYYY-MM-DD') is UTC and shows the previous day in US time zones)
+export const parseLocalDate = (d) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + 'T00:00:00') : new Date(d));

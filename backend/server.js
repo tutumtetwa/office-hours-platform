@@ -7,7 +7,7 @@ const { initializeDatabase } = require('./models/database');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Trust proxy for Railway
+// Trust the platform proxy (Vercel) so rate limiting sees real client IPs
 app.set('trust proxy', 1);
 
 // Security middleware
@@ -64,6 +64,13 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Run migrations/seed once per instance before serving any DB-backed route
+let dbReady;
+app.use((req, res, next) => {
+  dbReady = dbReady || initializeDatabase();
+  dbReady.then(() => next()).catch((err) => { dbReady = null; next(err); });
+});
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/password-reset', require('./routes/passwordReset'));
@@ -85,25 +92,11 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-// Initialize database and start server
-initializeDatabase().then(() => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║     Office Hours Booking Platform - API Server v2.1         ║
-║                                                              ║
-╠══════════════════════════════════════════════════════════════╣
-║  Server running on http://localhost:${PORT}                    ║
-║  Environment: ${process.env.NODE_ENV || 'development'}                              ║
-║  Database: PostgreSQL                                        ║
-╚══════════════════════════════════════════════════════════════╝
-
-Demo Credentials:
-  Instructor: prof.smith@university.edu / instructor123
-  Student:    student@university.edu / student123
-    `);
+// Local development: start a server. On Vercel the exported app is the handler.
+if (require.main === module && !process.env.VERCEL) {
+  initializeDatabase().then(() => {
+    app.listen(PORT, '0.0.0.0', () => console.log(`Office Hours API listening on http://localhost:${PORT}`));
   });
-});
+}
 
 module.exports = app;

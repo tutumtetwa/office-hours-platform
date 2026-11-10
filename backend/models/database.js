@@ -55,6 +55,14 @@ async function initializeDatabase() {
       )
     `);
 
+    // Per-user email preferences used by /auth/me and /auth/profile
+    await pool.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS email_booking_confirmation INTEGER DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS email_booking_reminder INTEGER DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS email_cancellation INTEGER DEFAULT 1
+    `);
+
     // Add phone_number column if it doesn't exist (for existing databases)
     await pool.query(`
       DO $$

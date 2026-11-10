@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { authAPI, setAuthToken } from '../utils/api';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { authAPI, setAuthToken, getStoredToken } from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -13,8 +13,17 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(() => !!getStoredToken());
   const [error, setError] = useState(null);
+
+  // Restore the session after a page refresh
+  useEffect(() => {
+    if (!getStoredToken()) return;
+    authAPI.getMe()
+      .then((res) => setUser(res.data.user))
+      .catch(() => setAuthToken(null))
+      .finally(() => setLoading(false));
+  }, []);
 
   const login = useCallback(async (email, password) => {
     setError(null);

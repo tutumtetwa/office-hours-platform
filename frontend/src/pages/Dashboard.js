@@ -1,3 +1,4 @@
+import { parseLocalDate } from '../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Clock, Users, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
@@ -171,7 +172,7 @@ const Dashboard = () => {
                       : `${apt.instructor?.first_name} ${apt.instructor?.last_name}`}
                   </div>
                   <div style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                    {new Date(apt.date).toLocaleDateString()} at {apt.start_time}
+                    {parseLocalDate(apt.date).toLocaleDateString()} at {apt.start_time}
                   </div>
                 </div>
               ))}

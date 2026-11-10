@@ -1,3 +1,4 @@
+import { parseLocalDate } from '../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { Clock, X, Users, Calendar, MapPin, User, Bell } from 'lucide-react';
 import { PageHeader, Card, Spinner, Alert } from '../components/UI';
@@ -29,7 +30,7 @@ const Waitlist = () => {
     } catch (e) { setError('Failed to leave waitlist'); }
   };
 
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const formatDate = (date) => parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const formatTime = (time) => {
     const [h, m] = time.split(':');
     const hour = parseInt(h);

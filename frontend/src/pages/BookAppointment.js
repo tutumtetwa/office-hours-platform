@@ -1,3 +1,4 @@
+import { parseLocalDate } from '../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, User, Check, Users, Bell } from 'lucide-react';
 import { PageHeader, Card, Spinner, Alert, Modal, FormSelect, FormTextarea } from '../components/UI';
@@ -73,7 +74,7 @@ const BookAppointment = () => {
     setSubmitting(false);
   };
 
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const formatDate = (date) => parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const formatTime = (time) => {
     const [h, m] = time.split(':');
     const hour = parseInt(h);
